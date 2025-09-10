@@ -130,12 +130,12 @@
                             Mintrans Avtoraqam
                         </a>
                         <a class="nav-link" href="/belarus" target="_blank" id="nav-page4">
-                            <i class="fas fa-chart-line me-2"></i>
-                            Belarus Chegara
+                            <i class="fas fa-globe-europe me-2"></i>
+                            Belarus Litva
                         </a>
                         <a class="nav-link" href="/turkey" target="_blank" id="nav-page5">
-                            <i class="fas fa-cog me-2"></i>
-                            Turkiya Chegara
+                            <i class="fas fa-flag me-2"></i>
+                            Turkiya Gruziya
                         </a>
                         <!-- <a class="nav-link" href="/page6" target="_blank" id="nav-page6">
                             <i class="fas fa-file-alt me-2"></i>

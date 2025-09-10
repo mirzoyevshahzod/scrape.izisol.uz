@@ -25,7 +25,7 @@ Route::get('/mintrans-auto', [MintransController::class, 'index'])->name('upload
 Route::post('/upload', [MintransController::class, 'upload'])->name('upload.store');
 
 //Belarus scraping
-Route::get('/belarus', [ScrapeController::class, 'index'])->name('belarus');
+Route::get('/belarus', [ScrapeController::class, 'index'])->name('scrape.data');
 Route::post('/belarus', [ScrapeController::class, 'scrape'])->name('scrape');
 
 //turkey scraping

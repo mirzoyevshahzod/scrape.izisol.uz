@@ -3,142 +3,122 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Artisan;
+use App\Models\VehicleData;
 
 class ScrapeController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        set_time_limit(0);
-        Log::info('Scraping sahifasi yuklandi');
-        return view('belarus');
+        try {
+            Log::info('ScrapeController: Belarus index sahifasi ochildi');
+            
+            $query = VehicleData::query();
+
+            // Filtrlarni qo'llash
+            if ($request->search) {
+                $query->where('reg_number', 'like', '%' . $request->search . '%');
+            }
+            if ($request->region_filter) {
+                $query->where('region', $request->region_filter);
+            }
+            
+            // Pagination bilan ma'lumotlarni olish
+            $allData = $query->orderBy('created_at', 'DESC')->paginate(10);
+
+            return view('belarus', compact('allData'));
+        } catch (\Exception $e) {
+            Log::error('ScrapeController: Index sahifasini ochishda xato: ' . $e->getMessage());
+            return redirect()->back()->with('error', 'Sahifani ochishda xato yuz berdi.');
+        }
     }
 
     public function scrape(Request $request)
     {
-        set_time_limit(0);
-        Log::info('CONTROLLER: Scrape methodi boshlandi');
-        Log::info('CONTROLLER: Kelgan ma\'lumotlar', $request->all());
-
+        set_time_limit(0); // Uzun jarayonlar uchun
         try {
-            // Validation
-            Log::info('CONTROLLER: Validation boshlandi');
-            $validatedData = $request->validate([
-                'region' => 'required|string|in:benyakoni,brest,grigorovschina,kamennyy_log,kozlovichi',
-            ]);
-            Log::info('CONTROLLER: Validation muvaffaqiyatli', $validatedData);
+            Log::info('ScrapeController: Scrape so‘rovi boshlandi: ' . json_encode($request->all()));
 
-            $region = $request->input('region');
-            
-            Log::info('CONTROLLER: Tanlangan region', [
-                'region' => $region
+            // Validatsiya
+            $validated = $request->validate([
+                'region' => 'required|in:benyakoni,brest,grigorovschina,kamennyy_log,kozlovichi',
             ]);
-            
-            // Region nomi va URL ni olish
+
+            $region = $validated['region'];
             $regionData = $this->getRegionData($region);
-            
-            // Fayl yo'li
-            $fileName = "declarant-{$regionData['name']}-" . date('Y-m-d-H-i-s') . ".xlsx";
+            $url = $regionData['url'];
+            $name = $regionData['name'];
+
+            // Fayl nomini yaratish
+            $fileName = "declarant-{$name}-" . date('Y-m-d-H-i-s') . ".xlsx";
             $filePath = storage_path("app/{$fileName}");
-            Log::info('CONTROLLER: Fayl yo\'li belgilandi', [
+            Log::info('ScrapeController: Fayl yo\'li belgilandi', [
                 'fileName' => $fileName,
                 'filePath' => $filePath,
-                'regionUrl' => $regionData['url'],
-                'regionName' => $regionData['name']
+                'regionUrl' => $url,
+                'regionName' => $name
             ]);
 
             // Storage papkasini tekshirish
             $storageDir = storage_path('app');
             if (!is_dir($storageDir)) {
-                Log::error('CONTROLLER: Storage papkasi mavjud emas', ['path' => $storageDir]);
+                Log::error('ScrapeController: Storage papkasi mavjud emas', ['path' => $storageDir]);
                 return redirect()->back()->with('error', 'Storage papkasi mavjud emas');
             }
             
             if (!is_writable($storageDir)) {
-                Log::error('CONTROLLER: Storage papkasiga yozish huquqi yo\'q', ['path' => $storageDir]);
+                Log::error('ScrapeController: Storage papkasiga yozish huquqi yo\'q', ['path' => $storageDir]);
                 return redirect()->back()->with('error', 'Storage papkasiga yozish huquqi yo\'q');
             }
-            
-            Log::info('CONTROLLER: Storage papkasi tekshirildi - OK');
 
-            // Universal command chaqirish
-            Log::info('CONTROLLER: Artisan command chaqirilmoqda', [
-                'command' => 'scrape:declarant',
-                'parameters' => [
-                    'region' => $region,
-                    'url' => $regionData['url'],
-                    'name' => $regionData['name']
-                ]
-            ]);
-
-            $exitCode = Artisan::call('scrape:declarant', [
+            // scrape:declarant commandini ishga tushirish
+            Artisan::call('scrape:declarant', [
                 'region' => $region,
-                '--url' => $regionData['url'],
-                '--name' => $regionData['name']
+                '--url' => $url,
+                '--name' => $name
             ]);
+            Log::info('ScrapeController: scrape:declarant commandi ishga tushirildi', ['output' => Artisan::output()]);
 
-            Log::info('CONTROLLER: Artisan command tugadi', [
-                'exit_code' => $exitCode,
-                'output' => Artisan::output()
-            ]);
-
-            // Fayl mavjudligini tekshirish
-            Log::info('CONTROLLER: Fayl mavjudligi tekshirilmoqda', ['file_path' => $filePath]);
-            
-            // Dinamik fayl nomini topish
-            $foundFile = $this->findLatestFile($regionData['name']);
-            
+            // Eng yangi faylni topish
+            $foundFile = $this->findLatestFile($name);
             if (!$foundFile || !file_exists($foundFile)) {
-                Log::error('CONTROLLER: Fayl mavjud emas', ['expected_path' => $filePath, 'found_file' => $foundFile]);
-                
-                // Storage da mavjud fayllarni ko'rish
-                $files = scandir(storage_path('app'));
-                Log::info('CONTROLLER: Storage dagi barcha fayllar', ['files' => $files]);
-                
+                Log::error('ScrapeController: Fayl mavjud emas', ['expected_path' => $filePath, 'found_file' => $foundFile]);
                 return redirect()->back()->with('error', 'Excel fayli yaratilmadi. Selenium server yoki internet aloqasini tekshiring.');
             }
 
             $fileSize = filesize($foundFile);
-            Log::info('CONTROLLER: Fayl topildi', [
+            Log::info('ScrapeController: Fayl topildi', [
                 'file_path' => $foundFile,
                 'file_size' => $fileSize,
                 'file_size_mb' => round($fileSize / 1024 / 1024, 2)
             ]);
 
             if ($fileSize <= 1000) { // 1KB dan kichik bo'lsa bo'sh deb hisoblaymiz
-                Log::error('CONTROLLER: Fayl juda kichik yoki bo\'sh', [
+                Log::error('ScrapeController: Fayl juda kichik yoki bo\'sh', [
                     'file_path' => $foundFile,
                     'file_size' => $fileSize
                 ]);
                 return redirect()->back()->with('error', 'Excel fayli bo\'sh yaratildi. O\'zbek mashina raqamlari topilmagan bo\'lishi mumkin.');
             }
 
-            // Download uchun tayyorlash
-            Log::info('CONTROLLER: Fayl download uchun tayyorlanmoqda');
-            
+            // Excel faylni avtomatik yuklash
             return response()->download($foundFile, basename($foundFile), [
                 'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
             ])->deleteFileAfterSend(false);
 
         } catch (\Illuminate\Validation\ValidationException $e) {
-            Log::error('CONTROLLER: Validation xatoligi', [
+            Log::error('ScrapeController: Validation xatoligi', [
                 'errors' => $e->errors(),
                 'message' => $e->getMessage()
             ]);
             return redirect()->back()->withErrors($e->errors())->withInput();
-            
         } catch (\Exception $e) {
-            Log::error('CONTROLLER: Umumiy xatolik', [
-                'message' => $e->getMessage(),
-                'file' => $e->getFile(),
-                'line' => $e->getLine(),
-                'trace' => $e->getTraceAsString()
-            ]);
-            return redirect()->back()->with('error', 'Xatolik yuz berdi: ' . $e->getMessage());
+            Log::error('ScrapeController: Scrape xatoligi: ' . $e->getMessage());
+            return redirect()->back()->with('error', 'Xato yuz berdi: ' . $e->getMessage());
         }
     }
-    
+
     /**
      * Region ma'lumotlarini qaytarish
      */
@@ -174,7 +154,7 @@ class ScrapeController extends Controller
 
         return $regions[$region] ?? $regions['benyakoni'];
     }
-    
+
     /**
      * Eng yangi faylni topish
      */

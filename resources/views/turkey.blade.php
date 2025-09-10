@@ -96,7 +96,7 @@
                 <div class="main-content">
                     <h1 class="header-title">
                         <i class="fas fa-cog me-2"></i>
-                        Turkey Data Scraper
+                        Turkiya Gruziya Chegara
                     </h1>
 
                     <div class="page-card">

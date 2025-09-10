@@ -7,10 +7,14 @@ use Facebook\WebDriver\Remote\DesiredCapabilities;
 use Facebook\WebDriver\WebDriverBy;
 use Facebook\WebDriver\WebDriverExpectedCondition;
 use Facebook\WebDriver\Chrome\ChromeOptions;
+use Facebook\WebDriver\WebDriverWait;
+use Facebook\WebDriver\Interactions\WebDriverActions as InteractionsWebDriverActions;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use PhpOffice\PhpSpreadsheet\Cell\DataType;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
 use Exception;
 
 class ScrapeDeclarantData extends Command
@@ -18,230 +22,102 @@ class ScrapeDeclarantData extends Command
     protected $signature = 'scrape:declarant {region} {--url=} {--name=}';
     protected $description = 'Universal scraper for all Declarant zones - extracts Uzbek vehicles data';
 
+    private $driver;
+    private $carNumbers = []; // Topilgan mashina raqamlari
+    private $allData = []; // Barcha ma'lumotlar
+    
     // O'zbek mashina raqamlari pattern-lari
     private $uzbekPatterns = [
-        // 01X###XX formatida
         '/^(01|10|20|25|30|40|50|60|70|75|80|85|90|95)[A-Z]\d{3}[A-Z]{2}$/',
-        // 01###XXX formatida  
         '/^(01|10|20|25|30|40|50|60|70|75|80|85|90|95)\d{3}[A-Z]{3}$/',
     ];
 
     public function handle()
     {
-        $region = $this->argument('region');
-        $url = $this->option('url');
-        $name = $this->option('name');
-        
-        $this->info("Starting Declarant data scraping process for region: {$region}");
-        $this->info("Target URL: {$url}");
-
-        $driver = null;
-        $spreadsheet = null;
+        set_time_limit(0);
+        Log::info('IntegratedScrape: Jarayon boshlandi');
 
         try {
-            // Initialize variables
-            $this->info('Initializing variables...');
-            $fileName = "declarant-{$name}-" . date('Y-m-d-H-i-s') . ".xlsx";
-            $filePath = storage_path("app/{$fileName}");
-            $this->info("Variables initialized: region={$region}, name={$name}, filePath={$filePath}");
+            $region = $this->argument('region');
+            $url = $this->option('url');
+            $name = $this->option('name');
 
-            // Check storage directory permissions
-            $this->info('Checking storage directory permissions...');
-            if (!is_writable(storage_path('app'))) {
-                throw new Exception('Storage directory is not writable!');
+            // 1-bosqich: Declarant saytidan mashina raqamlarini yig'ish
+            $this->info("1-bosqich: Declarant saytidan ma'lumot yig'ish...");
+            $this->scrapeDeclarantData($region, $url, $name);
+
+            if (empty($this->carNumbers)) {
+                $this->warn('Declarant saytidan mashina raqamlari topilmadi!');
+                return 1;
             }
-            $this->info('Storage directory is writable.');
 
-            // Initialize spreadsheet
-            $this->info('Creating new spreadsheet instance...');
-            $spreadsheet = new Spreadsheet();
-            $sheet = $spreadsheet->getActiveSheet();
-            $rowIndex = 1;
-            $this->info('Spreadsheet instance created successfully.');
+            $this->info("Jami " . count($this->carNumbers) . " ta o'zbek mashina raqami topildi");
 
-            // Set up Excel headers
-            $this->info('Setting up Excel headers...');
-            $headings = [
-                'Порядок вызова',
-                'Тип очереди', 
-                'Рег.номер',
-                'Дата регистрации в ЗО',
-                'Статус изменен',
-                'Статус'
-            ];
-            
-            foreach ($headings as $colIndex => $heading) {
-                $columnLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($colIndex + 1);
-                $sheet->setCellValue($columnLetter . $rowIndex, $heading);
-                $this->info("Set header at column {$columnLetter}{$rowIndex}: {$heading}");
-            }
-            $rowIndex++;
-            $this->info('Excel headers successfully written. Current rowIndex: ' . $rowIndex);
+            // 2-bosqich: Har bir mashina raqami uchun Mintrans ma'lumotlarini olish
+            $this->info("2-bosqich: Mintrans saytidan qo'shimcha ma'lumotlar olish...");
+            $this->scrapeMintransData();
 
-            // Initialize WebDriver with Chrome options
-            $this->info('Initializing WebDriver...');
-            $host = 'http://localhost:4444/wd/hub';
-            $chromeOptions = new ChromeOptions();
-            $chromeOptions->addArguments([
-                '--no-sandbox', 
-                '--disable-dev-shm-usage', 
-                '--disable-gpu',
-                '--window-size=1920,1080',
-                '--disable-blink-features=AutomationControlled',
-                '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-            ]);
-            
-            $capabilities = DesiredCapabilities::chrome();
-            $capabilities->setCapability(ChromeOptions::CAPABILITY, $chromeOptions);
-            
-            $driver = RemoteWebDriver::create($host, $capabilities);
-            $this->info('WebDriver successfully initialized.');
+            // 3-bosqich: Ma'lumotlarni Excel va Database ga saqlash
+            $this->info("3-bosqich: Ma'lumotlarni saqlash...");
+            $this->saveAllData($region, $name);
 
-            // Navigate to the specific region URL
-            $this->info("Navigating to {$url}...");
-            $driver->get($url);
-            $this->info('Waiting for page to load (8 seconds)...');
+            $this->info('Jarayon muvaffaqiyatli yakunlandi!');
+            return 0;
+
+        } catch (Exception $e) {
+            Log::error('IntegratedScrape xato: ' . $e->getMessage());
+            $this->error('Xato: ' . $e->getMessage());
+            $this->closeWebDriver();
+            return 1;
+        }
+    }
+
+    /**
+     * Declarant saytidan mashina raqamlarini yig'ish
+     */
+    private function scrapeDeclarantData($region, $url, $name)
+    {
+        $this->initializeWebDriver();
+        
+        try {
+            $this->driver->get($url);
             sleep(8);
-            $this->info('Website successfully loaded.');
 
-            // Wait for Angular/JavaScript to be fully loaded
-            $this->info('Waiting for page content to fully load...');
-            try {
-                $driver->wait(20)->until(
-                    WebDriverExpectedCondition::presenceOfElementLocated(
-                        WebDriverBy::cssSelector('table.cdk-table tbody tr')
-                    )
-                );
-                $this->info('Table content loaded successfully.');
-            } catch (Exception $e) {
-                $this->warn("Table loading check failed: {$e->getMessage()}. Attempting to continue...");
-                
-                // Additional wait and retry
-                sleep(5);
-                try {
-                    $testRows = $driver->findElements(WebDriverBy::cssSelector('table.cdk-table tbody tr'));
-                    $this->info("Found " . count($testRows) . " rows after retry.");
-                } catch (Exception $e2) {
-                    $this->warn("Second attempt failed: {$e2->getMessage()}");
-                }
-            }
-
-            // Additional wait for dynamic content
-            sleep(3);
-
-            $processedCount = 0;
-            $totalUzbekVehicles = 0;
-
-            // Main scraping loop with pagination support
-            $maxPages = 15; // Maximum pages to scrape
+            $maxPages = 15;
             $currentPage = 1;
             $consecutiveEmptyPages = 0;
 
             while ($currentPage <= $maxPages && $consecutiveEmptyPages < 3) {
-                $this->info("Processing page {$currentPage}...");
-                $pageUzbekCount = 0;
+                $this->info("Declarant sahifa {$currentPage} ni qayta ishlash...");
 
                 try {
-                    // Wait for table to be present with multiple selectors
-                    $tableFound = false;
-                    $tableSelectors = [
-                        'table.cdk-table tbody',
-                        'table tbody',
-                        '.table__wrapper table tbody'
-                    ];
+                    // Sahifa yuklanishini kutish
+                    $wait = new WebDriverWait($this->driver, 20);
+                    $wait->until(
+                        WebDriverExpectedCondition::presenceOfElementLocated(
+                            WebDriverBy::cssSelector('table.cdk-table tbody tr')
+                        )
+                    );
 
-                    foreach ($tableSelectors as $selector) {
-                        try {
-                            $driver->wait(5)->until(
-                                WebDriverExpectedCondition::presenceOfElementLocated(
-                                    WebDriverBy::cssSelector($selector)
-                                )
-                            );
-                            $tableFound = true;
-                            $this->info("Table found with selector: {$selector}");
-                            break;
-                        } catch (Exception $e) {
-                            continue;
-                        }
-                    }
-
-                    if (!$tableFound) {
-                        $this->warn("Table not found with any selector on page {$currentPage}");
-                        break;
-                    }
-
-                    // Get all rows from the table with multiple selectors
-                    $this->info('Extracting table rows...');
-                    $rows = [];
-                    $rowSelectors = [
-                        'table.cdk-table tbody tr.cdk-row',
-                        'table tbody tr',
-                        '.table__wrapper table tbody tr'
-                    ];
-
-                    foreach ($rowSelectors as $selector) {
-                        try {
-                            $rows = $driver->findElements(WebDriverBy::cssSelector($selector));
-                            if (count($rows) > 0) {
-                                $this->info("Found rows with selector: {$selector}");
-                                break;
-                            }
-                        } catch (Exception $e) {
-                            continue;
-                        }
-                    }
-
-                    $this->info("Found " . count($rows) . " rows on page {$currentPage}.");
-
-                    if (count($rows) == 0) {
+                    $rows = $this->driver->findElements(WebDriverBy::cssSelector('table.cdk-table tbody tr.cdk-row'));
+                    
+                    if (empty($rows)) {
                         $consecutiveEmptyPages++;
-                        $this->warn("No data found on page {$currentPage}. Empty pages count: {$consecutiveEmptyPages}");
+                        $this->warn("Sahifa {$currentPage} da ma'lumot topilmadi");
                         
-                        if ($consecutiveEmptyPages >= 3) {
-                            $this->warn("Found 3 consecutive empty pages. Ending pagination.");
-                            break;
-                        }
-                        
-                        // Try to go to next page anyway
-                        if (!$this->goToNextPage($driver, $currentPage)) {
-                            break;
-                        }
+                        if (!$this->goToNextPage($currentPage)) break;
                         $currentPage++;
                         continue;
-                    } else {
-                        $consecutiveEmptyPages = 0; // Reset empty page counter
                     }
 
-                    // Process each row
-                    foreach ($rows as $rowIdx => $row) {
-                        $this->info("Processing row " . ($rowIdx + 1) . " on page {$currentPage}...");
-                        
+                    $consecutiveEmptyPages = 0;
+
+                    foreach ($rows as $row) {
                         try {
-                            // Try different cell selectors
-                            $cells = [];
-                            $cellSelectors = [
-                                'td.cdk-cell',
-                                'td',
-                                '.table__cell'
-                            ];
+                            $cells = $row->findElements(WebDriverBy::cssSelector('td.cdk-cell'));
+                            
+                            if (count($cells) < 6) continue;
 
-                            foreach ($cellSelectors as $selector) {
-                                try {
-                                    $cells = $row->findElements(WebDriverBy::cssSelector($selector));
-                                    if (count($cells) >= 6) {
-                                        break;
-                                    }
-                                } catch (Exception $e) {
-                                    continue;
-                                }
-                            }
-
-                            if (count($cells) < 6) {
-                                $this->warn("Insufficient columns in row " . ($rowIdx + 1) . " (found " . count($cells) . "), skipping.");
-                                continue;
-                            }
-
-                            // Extract cell data
                             $orderNumber = trim($cells[0]->getText());
                             $queueType = trim($cells[1]->getText());
                             $regNumber = trim($cells[2]->getText());
@@ -249,138 +125,346 @@ class ScrapeDeclarantData extends Command
                             $statusChanged = trim($cells[4]->getText());
                             $status = trim($cells[5]->getText());
 
-                            // Clean status text (remove circle indicators)
-                            $status = preg_replace('/^\s*\w*\s*/', '', $status);
-                            $status = trim($status);
-
-                            $this->info("Extracted data: Order={$orderNumber}, Queue={$queueType}, RegNum={$regNumber}");
-
-                            // Check if registration number matches Uzbek patterns
-                            $isUzbekVehicle = $this->isUzbekVehicle($regNumber);
-                            
-                            if ($isUzbekVehicle) {
-                                $this->info("✓ Found Uzbek vehicle: {$regNumber}");
+                            // O'zbek mashina raqamini tekshirish
+                            if ($this->isUzbekVehicle($regNumber)) {
+                                $this->carNumbers[] = $regNumber;
                                 
-                                // Write to Excel
-                                $sheet->setCellValue('A' . $rowIndex, $orderNumber);
-                                $sheet->setCellValue('B' . $rowIndex, $queueType);
-                                $sheet->setCellValue('C' . $rowIndex, $regNumber);
-                                $sheet->setCellValue('D' . $rowIndex, $registrationDate);
-                                $sheet->setCellValue('E' . $rowIndex, $statusChanged);
-                                $sheet->setCellValue('F' . $rowIndex, $status);
+                                // Declarant ma'lumotlarini saqlash
+                                $this->allData[$regNumber] = [
+                                    'declarant' => [
+                                        'order_number' => $orderNumber,
+                                        'queue_type' => $queueType,
+                                        'reg_number' => $regNumber,
+                                        'registration_date' => $registrationDate,
+                                        'status_changed' => $statusChanged,
+                                        'status' => preg_replace('/^\s*\w*\s*/', '', $status),
+                                        'region' => $region
+                                    ],
+                                    'mintrans' => [] // Keyinchalik to'ldiriladi
+                                ];
 
-                                $rowIndex++;
-                                $totalUzbekVehicles++;
-                                $pageUzbekCount++;
-                                $this->info("Uzbek vehicle data written to Excel. Row: {$rowIndex}, Total Uzbek vehicles: {$totalUzbekVehicles}");
-                            } else {
-                                $this->info("✗ Non-Uzbek vehicle: {$regNumber} - skipping");
+                                Log::info("O'zbek mashina topildi: {$regNumber}");
                             }
 
                         } catch (Exception $e) {
-                            $this->warn("Error processing row " . ($rowIdx + 1) . ": {$e->getMessage()}");
+                            Log::warning("Qatorni o'qishda xato: " . $e->getMessage());
                         }
-
-                        $processedCount++;
                     }
 
-                    $this->info("Page {$currentPage} processed. Found {$pageUzbekCount} Uzbek vehicles on this page.");
-
-                    // Try to go to next page
-                    if (!$this->goToNextPage($driver, $currentPage)) {
-                        $this->info("No more pages available. Ending pagination.");
-                        break;
-                    }
-
+                    if (!$this->goToNextPage($currentPage)) break;
                     $currentPage++;
 
                 } catch (Exception $e) {
-                    $this->warn("Error processing page {$currentPage}: {$e->getMessage()}");
+                    Log::warning("Sahifa {$currentPage} da xato: " . $e->getMessage());
                     $consecutiveEmptyPages++;
                     
-                    if ($consecutiveEmptyPages >= 3) {
-                        break;
-                    }
-                    
-                    // Try to continue to next page
-                    if (!$this->goToNextPage($driver, $currentPage)) {
-                        break;
-                    }
+                    if (!$this->goToNextPage($currentPage)) break;
                     $currentPage++;
                 }
-
-                // Safety break to prevent infinite loops
-                if ($currentPage > $maxPages) {
-                    $this->warn("Reached maximum page limit ({$maxPages}). Stopping pagination.");
-                    break;
-                }
             }
-
-            // Save Excel file
-            $this->info("Saving Excel file to {$filePath}...");
-            $writer = new Xlsx($spreadsheet);
-            $writer->save($filePath);
-            $this->info('Excel file successfully saved.');
-
-            // Verify file existence and size
-            $this->info('Verifying Excel file...');
-            if (!file_exists($filePath) || filesize($filePath) == 0) {
-                throw new Exception('Failed to create or save Excel file: File is missing or empty.');
-            }
-            
-            $fileSize = filesize($filePath);
-            $this->info("Excel file verified: Exists and is non-empty (Size: {$fileSize} bytes).");
-            $this->info("Total processed rows: {$processedCount}");
-            $this->info("Total Uzbek vehicles found: {$totalUzbekVehicles}");
-            $this->info("Total pages processed: " . ($currentPage - 1));
-
-            if ($totalUzbekVehicles == 0) {
-                $this->warn('No Uzbek vehicles found in the data!');
-            } else {
-                $this->info("SUCCESS: Found {$totalUzbekVehicles} Uzbek vehicles in region {$region}");
-            }
-
-            $this->info('Declarant data scraping completed successfully!');
 
         } catch (Exception $e) {
-            $this->error("Critical error occurred: {$e->getMessage()}");
-            $this->error("Error file: {$e->getFile()}");
-            $this->error("Error line: {$e->getLine()}");
-            $this->info("Stack trace: {$e->getTraceAsString()}");
-        } finally {
-            // Clean up WebDriver
-            if ($driver) {
-                $this->info('Closing WebDriver...');
+            Log::error("Declarant scraping xato: " . $e->getMessage());
+        }
+
+        $this->closeWebDriver();
+    }
+
+    /**
+     * Mintrans saytidan qo'shimcha ma'lumotlar olish
+     */
+    private function scrapeMintransData()
+    {
+        $this->initializeWebDriver();
+        
+        try {
+            $this->driver->get('https://info.mintrans.uz/#/info/onSearch');
+            $wait = new WebDriverWait($this->driver, 10);
+            $wait->until(WebDriverExpectedCondition::presenceOfElementLocated(
+                WebDriverBy::tagName('body')
+            ));
+
+            $processedCount = 0;
+            $totalCars = count($this->carNumbers);
+
+            foreach ($this->carNumbers as $carNumber) {
+                $processedCount++;
+                $this->info("Mintrans qidiruv ({$processedCount}/{$totalCars}): {$carNumber}");
+
                 try {
-                    $driver->quit();
-                    $this->info('WebDriver successfully closed.');
+                    // Sahifani yangilash
+                    $this->driver->navigate()->refresh();
+                    $wait->until(WebDriverExpectedCondition::presenceOfElementLocated(
+                        WebDriverBy::tagName('body')
+                    ));
+
+                    // Inputga mashina raqamini yozish
+                    $input = $wait->until(WebDriverExpectedCondition::elementToBeClickable(
+                        WebDriverBy::cssSelector('input[ng-model="object.autoNumber"]')
+                    ));
+                    $input->clear();
+                    $input->sendKeys($carNumber);
+
+                    // Qidiruv tugmasini bosish
+                    $searchButton = $wait->until(WebDriverExpectedCondition::elementToBeClickable(
+                        WebDriverBy::cssSelector('button[ng-click="object.searchAutoNumber(object.autoNumber)"]')
+                    ));
+                    $searchButton->click();
+                    
+                    sleep(3);
+
+                    // Ma'lumotlarni olish
+                    $mintransData = $this->extractMintransData($wait);
+                    
+                    // Ma'lumotlarni asosiy arrayga qo'shish
+                    if (isset($this->allData[$carNumber])) {
+                        $this->allData[$carNumber]['mintrans'] = $mintransData;
+                    }
+
+                    Log::info("Mintrans ma'lumoti olindi: {$carNumber}");
+
                 } catch (Exception $e) {
-                    $this->warn("Error closing WebDriver: {$e->getMessage()}");
+                    Log::warning("Mintrans qidiruv xato ({$carNumber}): " . $e->getMessage());
+                    
+                    // Ma'lumot topilmasa bo'sh array
+                    if (isset($this->allData[$carNumber])) {
+                        $this->allData[$carNumber]['mintrans'] = [];
+                    }
+                }
+
+                // Har 10 ta mashina uchun kichik tanaffus
+                if ($processedCount % 10 === 0) {
+                    sleep(2);
                 }
             }
 
-            // Clean up spreadsheet resources
-            if (isset($spreadsheet)) {
-                $this->info('Cleaning up spreadsheet resources...');
-                try {
-                    $spreadsheet->disconnectWorksheets();
-                    unset($spreadsheet);
-                    $this->info('Spreadsheet resources successfully cleaned up.');
-                } catch (Exception $e) {
-                    $this->warn("Error cleaning up spreadsheet: {$e->getMessage()}");
+        } catch (Exception $e) {
+            Log::error("Mintrans scraping xato: " . $e->getMessage());
+        }
+
+        $this->closeWebDriver();
+    }
+
+    /**
+     * Mintrans ma'lumotlarini ajratib olish
+     */
+    private function extractMintransData($wait)
+    {
+        try {
+            $dataDiv = $wait->until(WebDriverExpectedCondition::presenceOfElementLocated(
+                WebDriverBy::id('data3')
+            ));
+
+            $data = [];
+
+            // h4 dan rusumi va yuk qobiliyatini olish
+            try {
+                $h4 = $dataDiv->findElement(WebDriverBy::tagName('h4'));
+                $h4Text = $h4->getText();
+                
+                if (preg_match('/Rusumi: (.*?)\s*Yuk ko\'tarish qobiliyati:\s*(.*?)$/', $h4Text, $matches)) {
+                    $data['rusumi'] = trim($matches[1]);
+                    $data['yuk_qobiliyati'] = trim($matches[2]);
                 }
+            } catch (Exception $e) {
+                Log::warning("h4 ma'lumotini olishda xato: " . $e->getMessage());
             }
+
+            // Jadval ma'lumotlarini olish
+            try {
+                $table = $dataDiv->findElement(WebDriverBy::cssSelector('table.table-bordered.table-striped.table-striped2'));
+                $rows = $table->findElements(WebDriverBy::tagName('tr'));
+
+                if (count($rows) > 1) {
+                    $dataRow = $rows[1];
+                    $cells = $dataRow->findElements(WebDriverBy::tagName('td'));
+
+                    if (count($cells) >= 11) {
+                        $data['license'] = $cells[1]->getText();
+                        $data['state_number'] = $cells[2]->getText();
+                        $data['company'] = $cells[3]->getText();
+                        $data['activity_type'] = $cells[4]->getText();
+                        $data['transport_type'] = $cells[5]->getText();
+                        $data['cargo_type'] = $cells[6]->getText();
+                        $data['issue_date'] = $cells[7]->getText();
+                        $data['expiry_date'] = $cells[8]->getText();
+                        $data['status'] = $cells[9]->getText();
+                        $data['regional_office'] = $cells[10]->getText();
+
+                        // Telefon raqamini olish (tooltip)
+                        try {
+                            $actions = new InteractionsWebDriverActions($this->driver);
+                            $actions->moveToElement($cells[3])->perform();
+                            sleep(1);
+
+                            $tooltip = $cells[3]->findElement(WebDriverBy::cssSelector('span.tooltip2 em'));
+                            $tooltipText = $tooltip->getText();
+
+                            if (preg_match('/(?:\+?998|\b998)?[- ]?\d{2}[- ]?\d{3}[- ]?\d{2}[- ]?\d{2}\b/', $tooltipText, $matches)) {
+                                $data['phone_number'] = $matches[0];
+                            }
+                        } catch (Exception $e) {
+                            $data['phone_number'] = '';
+                            Log::warning("Telefon raqamini olishda xato: " . $e->getMessage());
+                        }
+                    }
+                }
+            } catch (Exception $e) {
+                Log::warning("Jadval ma'lumotini olishda xato: " . $e->getMessage());
+            }
+
+            return $data;
+
+        } catch (Exception $e) {
+            Log::warning("Mintrans ma'lumotini olishda xato: " . $e->getMessage());
+            return [];
         }
     }
 
     /**
-     * Check if vehicle registration number matches Uzbek patterns
+     * Barcha ma'lumotlarni saqlash
+     */
+    private function saveAllData($region, $name)
+    {
+        // Excel fayl yaratish
+        $this->saveToExcel($region, $name);
+        
+        // Database ga saqlash
+        $this->saveToDatabase();
+    }
+
+    /**
+     * Excel ga saqlash
+     */
+    private function saveToExcel($region, $name)
+    {
+        $spreadsheet = new Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+        
+        // Sarlavhalar
+        $headers = [
+            'A1' => 'Tartib raqami',
+            'B1' => 'Navbat turi',
+            'C1' => 'Mashina raqami',
+            'D1' => 'Ro\'yxatga olingan sana',
+            'E1' => 'Holat o\'zgargan',
+            'F1' => 'Holati',
+            'G1' => 'Hudud',
+            'H1' => 'Rusumi',
+            'I1' => 'Yuk ko\'tarish qobiliyati',
+            'J1' => 'Litsenziya varaqasi',
+            'K1' => 'Davlat raqami',
+            'L1' => 'Korxona nomi',
+            'M1' => 'Telefon raqami',
+            'N1' => 'Faoliyat turi',
+            'O1' => 'Transport turi',
+            'P1' => 'Yuk turi',
+            'Q1' => 'Berilgan sana',
+            'R1' => 'Amal qilish muddati',
+            'S1' => 'Mintrans holati',
+            'T1' => 'Hududiy boshqarma'
+        ];
+
+        foreach ($headers as $cell => $header) {
+            $sheet->setCellValue($cell, $header);
+        }
+
+        $row = 2;
+        foreach ($this->allData as $carNumber => $data) {
+            $declarant = $data['declarant'];
+            $mintrans = $data['mintrans'];
+
+            $sheet->setCellValue('A' . $row, $declarant['order_number'] ?? '');
+            $sheet->setCellValue('B' . $row, $declarant['queue_type'] ?? '');
+            $sheet->setCellValue('C' . $row, $declarant['reg_number'] ?? '');
+            $sheet->setCellValue('D' . $row, $declarant['registration_date'] ?? '');
+            $sheet->setCellValue('E' . $row, $declarant['status_changed'] ?? '');
+            $sheet->setCellValue('F' . $row, $declarant['status'] ?? '');
+            $sheet->setCellValue('G' . $row, $declarant['region'] ?? '');
+            
+            $sheet->setCellValue('H' . $row, $mintrans['rusumi'] ?? '');
+            $sheet->setCellValue('I' . $row, $mintrans['yuk_qobiliyati'] ?? '');
+            $sheet->setCellValue('J' . $row, $mintrans['license'] ?? '');
+            $sheet->setCellValue('K' . $row, $mintrans['state_number'] ?? '');
+            $sheet->setCellValue('L' . $row, $mintrans['company'] ?? '');
+            $sheet->setCellValueExplicit('M' . $row, $mintrans['phone_number'] ?? '', DataType::TYPE_STRING);
+            $sheet->setCellValue('N' . $row, $mintrans['activity_type'] ?? '');
+            $sheet->setCellValue('O' . $row, $mintrans['transport_type'] ?? '');
+            $sheet->setCellValue('P' . $row, $mintrans['cargo_type'] ?? '');
+            $sheet->setCellValue('Q' . $row, $mintrans['issue_date'] ?? '');
+            $sheet->setCellValue('R' . $row, $mintrans['expiry_date'] ?? '');
+            $sheet->setCellValue('S' . $row, $mintrans['status'] ?? '');
+            $sheet->setCellValue('T' . $row, $mintrans['regional_office'] ?? '');
+
+            $row++;
+        }
+
+        // Faylni saqlash
+        $fileName = "integrated-data-{$name}-" . date('Y-m-d-H-i-s') . ".xlsx";
+        $filePath = storage_path("app/public/{$fileName}");
+        
+        $writer = new Xlsx($spreadsheet);
+        $writer->save($filePath);
+
+        $this->info("Excel fayl saqlandi: {$filePath}");
+        Log::info("Excel fayl yaratildi: {$filePath}");
+    }
+
+    /**
+     * Database ga saqlash
+     */
+    private function saveToDatabase()
+    {
+        foreach ($this->allData as $carNumber => $data) {
+            try {
+                DB::table('vehicle_data')->updateOrInsert(
+                    ['reg_number' => $carNumber],
+                    [
+                        // Declarant ma'lumotlari
+                        'order_number' => $data['declarant']['order_number'] ?? null,
+                        'queue_type' => $data['declarant']['queue_type'] ?? null,
+                        'reg_number' => $data['declarant']['reg_number'] ?? null,
+                        'registration_date' => $data['declarant']['registration_date'] ?? null,
+                        'status_changed' => $data['declarant']['status_changed'] ?? null,
+                        'declarant_status' => $data['declarant']['status'] ?? null,
+                        'region' => $data['declarant']['region'] ?? null,
+                        
+                        // Mintrans ma'lumotlari
+                        'rusumi' => $data['mintrans']['rusumi'] ?? null,
+                        'yuk_qobiliyati' => $data['mintrans']['yuk_qobiliyati'] ?? null,
+                        'license' => $data['mintrans']['license'] ?? null,
+                        'state_number' => $data['mintrans']['state_number'] ?? null,
+                        'company' => $data['mintrans']['company'] ?? null,
+                        'phone_number' => $data['mintrans']['phone_number'] ?? null,
+                        'activity_type' => $data['mintrans']['activity_type'] ?? null,
+                        'transport_type' => $data['mintrans']['transport_type'] ?? null,
+                        'cargo_type' => $data['mintrans']['cargo_type'] ?? null,
+                        'issue_date' => $data['mintrans']['issue_date'] ?? null,
+                        'expiry_date' => $data['mintrans']['expiry_date'] ?? null,
+                        'mintrans_status' => $data['mintrans']['status'] ?? null,
+                        'regional_office' => $data['mintrans']['regional_office'] ?? null,
+                        
+                        'updated_at' => now(),
+                        'created_at' => now()
+                    ]
+                );
+
+                Log::info("Database ga saqlandi: {$carNumber}");
+
+            } catch (Exception $e) {
+                Log::error("Database saqlashda xato ({$carNumber}): " . $e->getMessage());
+            }
+        }
+
+        $this->info("Database ga " . count($this->allData) . " ta yozuv saqlandi");
+    }
+
+    /**
+     * O'zbek mashina raqamini tekshirish
      */
     private function isUzbekVehicle($regNumber)
     {
         $regNumber = strtoupper(trim($regNumber));
-        
-        // Remove any spaces or special characters
         $regNumber = preg_replace('/[^A-Z0-9]/', '', $regNumber);
         
         foreach ($this->uzbekPatterns as $pattern) {
@@ -393,109 +477,88 @@ class ScrapeDeclarantData extends Command
     }
 
     /**
-     * Attempt to navigate to next page
+     * Keyingi sahifaga o'tish
      */
-    private function goToNextPage($driver, $currentPage)
+    private function goToNextPage($currentPage)
     {
-        $this->info('Looking for pagination controls...');
-        
         try {
-            // Multiple pagination strategies
-            $paginationStrategies = [
-                // Strategy 1: Common next button selectors
-                [
-                    'selectors' => [
-                        'button[aria-label="Next page"]',
-                        '.pagination .next:not(.disabled)',
-                        '.mat-paginator-next-button:not([disabled])',
-                        'button.next-page:not([disabled])',
-                        '[data-testid="next-page"]',
-                        '.pagination-next:not(.disabled)'
-                    ],
-                    'method' => 'click'
-                ],
-                // Strategy 2: Page number links
-                [
-                    'selectors' => [
-                        '.pagination a[data-page="' . ($currentPage + 1) . '"]',
-                        '.page-link:contains("' . ($currentPage + 1) . '")'
-                    ],
-                    'method' => 'click'
-                ],
-                // Strategy 3: Generic pagination
-                [
-                    'selectors' => [
-                        '.pagination li:last-child a:not(.disabled)',
-                        '.pager .next a'
-                    ],
-                    'method' => 'click'
-                ]
+            $paginationSelectors = [
+                'button[aria-label="Next page"]',
+                '.pagination .next:not(.disabled)',
+                '.mat-paginator-next-button:not([disabled])'
             ];
 
-            foreach ($paginationStrategies as $strategy) {
-                foreach ($strategy['selectors'] as $selector) {
-                    try {
-                        $elements = $driver->findElements(WebDriverBy::cssSelector($selector));
-                        
-                        foreach ($elements as $element) {
-                            if ($element->isDisplayed() && $element->isEnabled()) {
-                                $this->info("Found pagination element with selector: {$selector}");
-                                
-                                // Scroll to element
-                                $driver->executeScript("arguments[0].scrollIntoView(true);", [$element]);
-                                sleep(1);
-                                
-                                // Click the element
-                                $element->click();
-                                $this->info("Clicked next page button successfully");
-                                
-                                // Wait for page to load
-                                sleep(4);
-                                
-                                // Verify page changed
-                                $this->info("Waiting for next page to load...");
-                                return true;
-                            }
-                        }
-                    } catch (Exception $e) {
-                        // Continue to next selector
-                        continue;
-                    }
-                }
-            }
-
-            // Strategy 4: JavaScript-based pagination
-            try {
-                $this->info("Attempting JavaScript-based pagination...");
-                
-                $jsCommands = [
-                    "document.querySelector('button[aria-label=\"Next page\"]')?.click()",
-                    "document.querySelector('.pagination .next:not(.disabled)')?.click()",
-                    "document.querySelector('.mat-paginator-next-button:not([disabled])')?.click()"
-                ];
-
-                foreach ($jsCommands as $js) {
-                    try {
-                        $result = $driver->executeScript("return " . $js . " || false");
-                        if ($result) {
-                            $this->info("JavaScript pagination successful");
+            foreach ($paginationSelectors as $selector) {
+                try {
+                    $elements = $this->driver->findElements(WebDriverBy::cssSelector($selector));
+                    
+                    foreach ($elements as $element) {
+                        if ($element->isDisplayed() && $element->isEnabled()) {
+                            $this->driver->executeScript("arguments[0].scrollIntoView(true);", [$element]);
+                            sleep(1);
+                            $element->click();
                             sleep(4);
                             return true;
                         }
-                    } catch (Exception $e) {
-                        continue;
                     }
+                } catch (Exception $e) {
+                    continue;
                 }
-            } catch (Exception $e) {
-                $this->warn("JavaScript pagination failed: {$e->getMessage()}");
             }
 
-            $this->info("No pagination controls found or all methods failed.");
             return false;
 
         } catch (Exception $e) {
-            $this->warn("Pagination error: {$e->getMessage()}");
+            Log::warning("Pagination xato: " . $e->getMessage());
             return false;
+        }
+    }
+
+    /**
+     * WebDriver ni ishga tushirish
+     */
+    private function initializeWebDriver()
+    {
+        try {
+            $host = 'http://localhost:4444/wd/hub';
+            $chromeOptions = new ChromeOptions();
+            $chromeOptions->addArguments([
+                '--no-sandbox', 
+                '--disable-dev-shm-usage', 
+                '--disable-gpu',
+                '--window-size=1920,1080',
+                '--disable-blink-features=AutomationControlled',
+                '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            ]);
+            
+            $capabilities = DesiredCapabilities::chrome();
+            $capabilities->setCapability(ChromeOptions::CAPABILITY, $chromeOptions);
+            
+            $this->driver = RemoteWebDriver::create($host, $capabilities);
+            $this->driver->manage()->timeouts()->implicitlyWait(5);
+            
+            Log::info('WebDriver ishga tushdi');
+            return true;
+
+        } catch (Exception $e) {
+            Log::error('WebDriver xato: ' . $e->getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * WebDriver ni yopish
+     */
+    private function closeWebDriver()
+    {
+        try {
+            if ($this->driver) {
+                $this->driver->quit();
+                $this->driver = null;
+                Log::info('WebDriver yopildi');
+            }
+        } catch (Exception $e) {
+            Log::error('WebDriver yopishda xato: ' . $e->getMessage());
         }
     }
 }
