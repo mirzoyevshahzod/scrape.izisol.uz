@@ -27,7 +27,11 @@ Route::post('/upload', [MintransController::class, 'upload'])->name('upload.stor
 //Belarus scraping
 Route::get('/belarus', [ScrapeController::class, 'index'])->name('scrape.data');
 Route::post('/belarus', [ScrapeController::class, 'scrape'])->name('scrape');
+Route::get('/belarus/details/{id}', [ScrapeController::class, 'getBelarusDetails'])->name('belarus.details');
 
-//turkey scraping
-Route::get('/turkey', [TurkeyScraperController::class, 'index'])->name('turkey');
-Route::post('/turkey', [TurkeyScraperController::class, 'scrape'])->name('scrape.turkey');
+// Turkey scraper routes
+Route::get('/turkey', [TurkeyScraperController::class, 'index'])->name('turkey.index');
+Route::post('/turkey/scrape', [TurkeyScraperController::class, 'scrape'])->name('turkey.scrape');
+Route::get('/turkey/status', [TurkeyScraperController::class, 'checkScrapingStatus'])->name('turkey.status');
+Route::get('/turkey/download/{file}', [TurkeyScraperController::class, 'downloadFile'])->name('turkey.download');
+Route::get('/turkey/details/{id}', [TurkeyScraperController::class, 'getDetails'])->name('turkey.details');

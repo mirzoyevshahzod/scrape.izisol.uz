@@ -174,4 +174,59 @@ class ScrapeController extends Controller
         
         return $files[0];
     }
+    /**
+     * ID bo'yicha Belarus ma'lumotlarini modal uchun olish
+     */
+    public function getBelarusDetails($id)
+    {
+        try {
+            // Belarus data modelini ishlatish kerak (BelarusData yoki qaysi model bo'lsa)
+            $data = VehicleData::findOrFail($id);
+            
+            Log::info('BelarusScraperController: Ma\'lumot tafsilotlari olinmoqda', ['id' => $id]);
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    // Asosiy ma'lumotlar
+                    'reg_number' => $data->reg_number,
+                    'order_number' => $data->order_number,
+                    'queue_type' => $data->queue_type,
+                    'registration_date' => $data->registration_date,
+                    'status_changed' => $data->status_changed,
+                    'declarant_status' => $data->declarant_status,
+                    'region' => $data->region,
+                    
+                    // Transport ma'lumotlari
+                    'rusumi' => $data->rusumi,
+                    'transport_type' => $data->transport_type,
+                    'cargo_type' => $data->cargo_type,
+                    
+                    // Litsenziya ma'lumotlari
+                    'license' => $data->license,
+                    'issue_date' => $data->issue_date,
+                    'expiry_date' => $data->expiry_date,
+                    
+                    // Korxona ma'lumotlari
+                    'company' => $data->company,
+                    'activity_type' => $data->activity_type,
+                    
+                    // Vaqt belgilari
+                    'created_at' => $data->created_at ? $data->created_at->format('d.m.Y H:i') : null,
+                    'updated_at' => $data->updated_at ? $data->updated_at->format('d.m.Y H:i') : null,
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('BelarusScraperController: Ma\'lumot tafsilotlari olishda xato', [
+                'id' => $id,
+                'message' => $e->getMessage()
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Ma\'lumot topilmadi yoki xatolik yuz berdi'
+            ], 404);
+        }
+    }
 }

@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>Belarus Data Scraper</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
@@ -113,19 +114,42 @@
             position: sticky;
             top: 0;
             z-index: 1;
+            border: none;
+            padding: 15px 12px;
+            font-weight: 600;
         }
         .table tbody tr {
-            transition: background-color 0.3s ease;
+            transition: all 0.3s ease;
         }
         .table tbody tr:hover {
-            background-color: rgba(102, 126, 234, 0.1);
+            background-color: rgba(102, 126, 234, 0.08);
+            transform: translateY(-1px);
         }
         .table tbody tr:nth-child(even) {
-            background-color: rgba(102, 126, 234, 0.05);
+            background-color: rgba(102, 126, 234, 0.02);
         }
-        .table th, .table td {
+        .table tbody td {
+            padding: 15px 12px;
             vertical-align: middle;
-            font-size: 0.9rem;
+            border: none;
+            border-bottom: 1px solid #e9ecef;
+        }
+        .view-details-btn {
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+            border: none;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            transition: all 0.3s ease;
+        }
+        .view-details-btn:hover {
+            background: linear-gradient(135deg, #218838 0%, #1ea085 100%);
+            transform: scale(1.1);
+            color: white;
         }
         .filter-form .form-control, .filter-form .form-select {
             border-radius: 8px;
@@ -142,6 +166,101 @@
         }
         .pagination .page-link:hover {
             background: #e3f2fd;
+        }
+
+        /* Modal Styles */
+        .modal-content {
+            border: none;
+            border-radius: 15px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        .modal-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 15px 15px 0 0;
+            border: none;
+            padding: 20px 25px;
+        }
+        .modal-title {
+            font-weight: 600;
+            font-size: 1.3rem;
+        }
+        .modal-body {
+            padding: 25px;
+            background: #f8f9fa;
+        }
+        .modal-footer {
+            border: none;
+            padding: 20px 25px;
+            background: white;
+            border-radius: 0 0 15px 15px;
+        }
+        
+        /* Data Group Styles */
+        .data-group {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.05);
+            border-left: 4px solid;
+        }
+        .data-group.declarant { border-left-color: #007bff; }
+        .data-group.transport { border-left-color: #28a745; }
+        .data-group.license { border-left-color: #dc3545; }
+        .data-group.company { border-left-color: #fd7e14; }
+        .data-group.system { border-left-color: #6c757d; }
+
+        .data-group-title {
+            font-weight: 600;
+            font-size: 1.1rem;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+        }
+        .data-group-title i {
+            margin-right: 10px;
+            width: 20px;
+            text-align: center;
+        }
+        
+        .data-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px solid #e9ecef;
+        }
+        .data-row:last-child {
+            border-bottom: none;
+        }
+        .data-label {
+            font-weight: 500;
+            color: #495057;
+        }
+        .data-value {
+            font-weight: 400;
+            text-align: right;
+            max-width: 60%;
+            word-break: break-word;
+        }
+        
+        /* Value color coding */
+        .value-primary { color: #667eea; font-weight: 600; }
+        .value-success { color: #28a745; font-weight: 600; }
+        .value-warning { color: #fd7e14; font-weight: 600; }
+        .value-danger { color: #dc3545; font-weight: 600; }
+        .value-info { color: #17a2b8; font-weight: 600; }
+        .value-muted { color: #6c757d; }
+
+        .btn-close {
+            background: none;
+            border: none;
+            font-size: 1.2rem;
+            color: rgba(255,255,255,0.8);
+        }
+        .btn-close:hover {
+            color: white;
         }
     </style>
 </head>
@@ -161,7 +280,7 @@
                                 <div class="col-md-10">
                                     <div class="text-center mb-4">
                                         <i class="fas fa-chart-line" style="font-size: 3rem; color: #667eea; margin-bottom: 15px;"></i>
-                                        <h2 class="page-title">Data Scraper</h2>
+                                        <h2 class="page-title">Belarus Data Scraper</h2>
                                         <p class="page-subtitle">Chegara hududini tanlang va ma'lumotlarni yig'ishni boshlang</p>
                                     </div>
 
@@ -207,12 +326,6 @@
                                                         <i class="fas fa-info-circle me-1"></i>
                                                         Ma'lumotlarni yig'ish uchun chegara hududini tanlang
                                                     </div>
-                                                    <div class="invalid-feedback" id="region_error">
-                                                        Iltimos, chegara hududini tanlang
-                                                    </div>
-                                                    @error('region')
-                                                        <div class="text-danger mt-1">{{ $message }}</div>
-                                                    @enderror
                                                 </div>
 
                                                 <div class="d-grid gap-2">
@@ -264,54 +377,47 @@
                                                 <h5 class="mb-0">
                                                     <i class="fas fa-database me-2"></i>
                                                     Saqlangan Ma'lumotlar
+                                                    @if(isset($allData) && $allData->total() > 0)
+                                                        <span class="badge bg-light text-dark ms-2">{{ $allData->total() }} ta yozuv</span>
+                                                    @endif
                                                 </h5>
                                             </div>
                                             <div class="card-body p-4">
-                                                @if($allData->isEmpty())
+                                                @if(isset($allData) && $allData->isEmpty())
                                                     <div class="alert alert-info" role="alert">
                                                         <i class="fas fa-info-circle me-2"></i>
                                                         Hozircha saqlangan ma'lumotlar mavjud emas.
                                                     </div>
-                                                @else
+                                                @elseif(isset($allData))
                                                     <div class="table-responsive">
-                                                        <table class="table table-hover table-striped">
+                                                        <table class="table table-hover">
                                                             <thead>
                                                                 <tr>
-                                                                    <th scope="col">Mashina Raqami</th>
-                                                                    <th scope="col">Navbat Raqami</th>
-                                                                    <th scope="col">Navbat Turi</th>
-                                                                    <th scope="col">Ro'yxatga Olingan Sana</th>
-                                                                    <th scope="col">Holat O'zgargan</th>
-                                                                    <th scope="col">Holati</th>
-                                                                    <th scope="col">Hudud</th>
-                                                                    <th scope="col">Rusumi</th>
-                                                                    <th scope="col">Litsenziya</th>
+                                                                    <th scope="col" style="width: 140px;">Mashina Raqami</th>
+                                                                    <th scope="col" style="width: 120px;">Navbat Raqami</th>
+                                                                    <th scope="col" style="width: 160px;">Ro'yxatga Olingan Sana</th>
+                                                                    <th scope="col" style="width: 120px;">Hudud</th>
                                                                     <th scope="col">Korxona</th>
-                                                                    <th scope="col">Faoliyat Turi</th>
-                                                                    <th scope="col">Transport Turi</th>
-                                                                    <th scope="col">Yuk Turi</th>
-                                                                    <th scope="col">Berilgan Sana</th>
-                                                                    <th scope="col">Amal Muddati</th>
+                                                                    <th scope="col" style="width: 80px; text-align: center;">Tafsilot</th>
                                                                 </tr>
                                                             </thead>
                                                             <tbody>
                                                                 @foreach($allData as $data)
                                                                     <tr>
-                                                                        <td>{{ $data->reg_number ?? '-' }}</td>
-                                                                        <td>{{ $data->order_number ?? '-' }}</td>
-                                                                        <td>{{ $data->queue_type ?? '-' }}</td>
-                                                                        <td>{{ $data->registration_date ?? '-' }}</td>
-                                                                        <td>{{ $data->status_changed ?? '-' }}</td>
-                                                                        <td>{{ $data->declarant_status ?? '-' }}</td>
-                                                                        <td>{{ $data->region ?? '-' }}</td>
-                                                                        <td>{{ $data->rusumi ?? '-' }}</td>
-                                                                        <td>{{ $data->license ?? '-' }}</td>
-                                                                        <td>{{ $data->company ?? '-' }}</td>
-                                                                        <td>{{ $data->activity_type ?? '-' }}</td>
-                                                                        <td>{{ $data->transport_type ?? '-' }}</td>
-                                                                        <td>{{ $data->cargo_type ?? '-' }}</td>
-                                                                        <td>{{ $data->issue_date ?? '-' }}</td>
-                                                                        <td>{{ $data->expiry_date ?? '-' }}</td>
+                                                                        <td><strong class="value-success">{{ $data->reg_number ?? '-' }}</strong></td>
+                                                                        <td><span class="value-primary">{{ $data->order_number ?? '-' }}</span></td>
+                                                                        <td><span class="value-info">{{ $data->registration_date ?? '-' }}</span></td>
+                                                                        <td><span class="value-warning">{{ $data->region ?? '-' }}</span></td>
+                                                                        <td>
+                                                                            <span class="value-danger">
+                                                                                {{ $data->company ? (strlen($data->company) > 40 ? substr($data->company, 0, 40) . '...' : $data->company) : '-' }}
+                                                                            </span>
+                                                                        </td>
+                                                                        <td class="text-center">
+                                                                            <button type="button" class="btn view-details-btn" data-id="{{ $data->id }}" title="Tafsilotlarni ko'rish">
+                                                                                <i class="fas fa-eye"></i>
+                                                                            </button>
+                                                                        </td>
                                                                     </tr>
                                                                 @endforeach
                                                             </tbody>
@@ -331,7 +437,7 @@
                                             <div class="card info-card h-100">
                                                 <div class="card-body">
                                                     <h5 class="card-title text-primary">
-                                                        <i class="fas fa-chart-line me-2"></i>Data Scraper Xususiyatlari
+                                                        <i class="fas fa-chart-line me-2"></i>Belarus Data Scraper Xususiyatlari
                                                     </h5>
                                                     <ul class="list-unstyled mb-0">
                                                         <li class="mb-2"><i class="fas fa-check text-success me-2"></i>Chegara hududi bo'yicha qidirish</li>
@@ -353,7 +459,7 @@
                                                         <li class="mb-2"><i class="fas fa-check text-success me-2"></i>Chegara hududini tanlang</li>
                                                         <li class="mb-2"><i class="fas fa-check text-success me-2"></i>"Ma'lumotlarni yig'ishni boshlash" tugmasini bosing</li>
                                                         <li class="mb-2"><i class="fas fa-check text-success me-2"></i>Jarayon yakunlanishini kuting</li>
-                                                        <li class="mb-0"><i class="fas fa-check text-success me-2"></i>Excel fayl avtomatik yuklanadi va natijalar jadvalda ko'rinadi</li>
+                                                        <li class="mb-0"><i class="fas fa-check text-success me-2"></i>Excel fayl avtomatik yuklanadi</li>
                                                     </ul>
                                                 </div>
                                             </div>
@@ -392,6 +498,33 @@
         </div>
     </div>
 
+    <!-- Details Modal -->
+    <div class="modal fade" id="detailsModal" tabindex="-1" aria-labelledby="detailsModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="detailsModalLabel">
+                        <i class="fas fa-info-circle me-2"></i>
+                        Ma'lumot tafsilotlari
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="modalBodyContent">
+                    <div class="d-flex justify-content-center align-items-center" style="height: 200px;">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Yuklanmoqda...</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="fas fa-times me-2"></i>Yopish
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
@@ -399,7 +532,9 @@
             const submitBtn = document.getElementById('submitBtn');
             const regionSelect = document.getElementById('region');
             const loadingIndicator = document.getElementById('loadingIndicator');
+            const detailsModal = new bootstrap.Modal(document.getElementById('detailsModal'));
 
+            // Scraping form submission
             if (scrapeForm) {
                 scrapeForm.addEventListener('submit', function(e) {
                     if (!regionSelect.value) {
@@ -427,7 +562,233 @@
                     });
                 }
             }
+
+            // Details button click handlers
+            document.addEventListener('click', function(e) {
+                if (e.target.closest('.view-details-btn')) {
+                    const btn = e.target.closest('.view-details-btn');
+                    const id = btn.getAttribute('data-id');
+                    loadDetails(id);
+                }
+            });
+
+            // Load details function
+            function loadDetails(id) {
+                const modalBody = document.getElementById('modalBodyContent');
+                
+                // Show loading state
+                modalBody.innerHTML = `
+                    <div class="d-flex justify-content-center align-items-center" style="height: 200px;">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Yuklanmoqda...</span>
+                        </div>
+                    </div>
+                `;
+                
+                // Show modal
+                detailsModal.show();
+                
+                // Fetch data
+                fetch(`/belarus/details/${id}`, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                    }
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        renderDetailsModal(data.data);
+                    } else {
+                        showError('Ma\'lumot yuklanmadi: ' + (data.message || 'Noma\'lum xato'));
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    showError('Ma\'lumot yuklashda xatolik yuz berdi');
+                });
+            }
+
+            // Render details in modal
+            function renderDetailsModal(data) {
+                const modalBody = document.getElementById('modalBodyContent');
+                
+                modalBody.innerHTML = `
+                    <!-- Declarant Ma'lumotlari -->
+                    <div class="data-group declarant">
+                        <div class="data-group-title">
+                            <i class="fas fa-file-alt text-primary"></i>
+                            Declarant Ma'lumotlari
+                        </div>
+                        <div class="data-row">
+                            <span class="data-label">Mashina raqami:</span>
+                            <span class="data-value value-success"><strong>${data.reg_number || '-'}</strong></span>
+                        </div>
+                        <div class="data-row">
+                            <span class="data-label">Navbat raqami:</span>
+                            <span class="data-value value-primary">${data.order_number || '-'}</span>
+                        </div>
+                        <div class="data-row">
+                            <span class="data-label">Navbat turi:</span>
+                            <span class="data-value value-info">${data.queue_type || '-'}</span>
+                        </div>
+                        <div class="data-row">
+                            <span class="data-label">Ro'yxatga olingan sana:</span>
+                            <span class="data-value value-warning">${data.registration_date || '-'}</span>
+                        </div>
+                        <div class="data-row">
+                            <span class="data-label">Holat o'zgargan:</span>
+                            <span class="data-value value-info">${data.status_changed || '-'}</span>
+                        </div>
+                        <div class="data-row">
+                            <span class="data-label">Declarant holati:</span>
+                            <span class="data-value ${getStatusColor(data.declarant_status)}">${data.declarant_status || '-'}</span>
+                        </div>
+                        <div class="data-row">
+                            <span class="data-label">Hudud:</span>
+                            <span class="data-value value-danger">${data.region || '-'}</span>
+                        </div>
+                    </div>
+
+                    <!-- Transport Ma'lumotlari -->
+                    <div class="data-group transport">
+                        <div class="data-group-title">
+                            <i class="fas fa-truck text-success"></i>
+                            Transport Ma'lumotlari
+                        </div>
+                        <div class="data-row">
+                            <span class="data-label">Rusumi:</span>
+                            <span class="data-value value-primary">${data.rusumi || '-'}</span>
+                        </div>
+                        <div class="data-row">
+                            <span class="data-label">Yuk ko'tarish qobiliyati:</span>
+                            <span class="data-value value-info">${data.yuk_qobiliyati || '-'}</span>
+                        </div>
+                        <div class="data-row">
+                            <span class="data-label">Transport turi:</span>
+                            <span class="data-value value-success">${data.transport_type || '-'}</span>
+                        </div>
+                        <div class="data-row">
+                            <span class="data-label">Yuk turi:</span>
+                            <span class="data-value value-warning">${data.cargo_type || '-'}</span>
+                        </div>
+                        <div class="data-row">
+                            <span class="data-label">Davlat raqami:</span>
+                            <span class="data-value value-primary">${data.state_number || '-'}</span>
+                        </div>
+                    </div>
+
+                    <!-- Litsenziya Ma'lumotlari -->
+                    <div class="data-group license">
+                        <div class="data-group-title">
+                            <i class="fas fa-certificate text-danger"></i>
+                            Litsenziya Ma'lumotlari
+                        </div>
+                        <div class="data-row">
+                            <span class="data-label">Litsenziya varaqasi:</span>
+                            <span class="data-value value-danger">${data.license || '-'}</span>
+                        </div>
+                        <div class="data-row">
+                            <span class="data-label">Berilgan sana:</span>
+                            <span class="data-value value-info">${data.issue_date || '-'}</span>
+                        </div>
+                        <div class="data-row">
+                            <span class="data-label">Amal qilish muddati:</span>
+                            <span class="data-value value-warning">${data.expiry_date || '-'}</span>
+                        </div>
+                        <div class="data-row">
+                            <span class="data-label">Mintrans holati:</span>
+                            <span class="data-value ${getStatusColor(data.mintrans_status)}">${data.mintrans_status || '-'}</span>
+                        </div>
+                        <div class="data-row">
+                            <span class="data-label">Hududiy boshqarma:</span>
+                            <span class="data-value value-muted">${data.regional_office || '-'}</span>
+                        </div>
+                    </div>
+
+                    <!-- Korxona Ma'lumotlari -->
+                    <div class="data-group company">
+                        <div class="data-group-title">
+                            <i class="fas fa-building text-warning"></i>
+                            Korxona Ma'lumotlari
+                        </div>
+                        <div class="data-row">
+                            <span class="data-label">Korxona nomi:</span>
+                            <span class="data-value value-danger">${data.company || '-'}</span>
+                        </div>
+                        <div class="data-row">
+                            <span class="data-label">Telefon raqami:</span>
+                            <span class="data-value value-success">${data.phone_number || '-'}</span>
+                        </div>
+                        <div class="data-row">
+                            <span class="data-label">Faoliyat turi:</span>
+                            <span class="data-value value-info">${data.activity_type || '-'}</span>
+                        </div>
+                    </div>
+
+                    <!-- Tizim Ma'lumotlari -->
+                    <div class="data-group system">
+                        <div class="data-group-title">
+                            <i class="fas fa-cog text-muted"></i>
+                            Tizim Ma'lumotlari
+                        </div>
+                        <div class="data-row">
+                            <span class="data-label">Qo'shilgan vaqt:</span>
+                            <span class="data-value value-muted">${data.created_at || '-'}</span>
+                        </div>
+                        <div class="data-row">
+                            <span class="data-label">Oxirgi yangilanish:</span>
+                            <span class="data-value value-muted">${data.updated_at || '-'}</span>
+                        </div>
+                    </div>
+                `;
+            }
+
+            // Get status color based on value
+            function getStatusColor(status) {
+                if (!status) return 'value-muted';
+                const statusLower = status.toLowerCase();
+                if (statusLower.includes('faol') || statusLower.includes('active') || statusLower.includes('действует')) {
+                    return 'value-success';
+                } else if (statusLower.includes('muddati') || statusLower.includes('expired') || statusLower.includes('истек')) {
+                    return 'value-danger';
+                } else if (statusLower.includes('kutish') || statusLower.includes('pending') || statusLower.includes('ожидание')) {
+                    return 'value-warning';
+                } else {
+                    return 'value-info';
+                }
+            }
+
+            // Show error in modal
+            function showError(message) {
+                const modalBody = document.getElementById('modalBodyContent');
+                modalBody.innerHTML = `
+                    <div class="alert alert-danger" role="alert">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        ${message}
+                    </div>
+                `;
+            }
+
+            // Auto refresh functionality (optional)
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.get('autorefresh') === '1') {
+                setTimeout(() => {
+                    window.location.reload();
+                }, 30000); // 30 seconds
+            }
         });
+
+        // Global function for manual refresh
+        function refreshPage() {
+            window.location.reload();
+        }
+
+        // Export to Excel function (if needed)
+        function exportToExcel() {
+            window.location.href = '{{ route("scrape") }}';
+        }
     </script>
 </body>
 </html>
