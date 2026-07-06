@@ -31,6 +31,23 @@ return [
 
     'connections' => [
 
+        'zanjeer' => [
+            'driver' => 'mysql',
+            'url' => env('DB_ZANJEER_URL'),
+            'host' => env('DB_ZANJEER_HOST', '127.0.0.1'),
+            'port' => env('DB_ZANJEER_PORT', '3306'),
+            'username' => env('DB_ZANJEER_USERNAME', 'zanjeer'),
+            'password' => env('DB_ZANJEER_PASSWORD', 'qI3zY8hI5e'),
+            'database' => env('DB_ZANJEER_DATABASE', 'zanjeer_crm'),
+            'unix_socket' => env('DB_ZANJEER_SOCKET', ''),
+            'charset' => env('DB_ZANJEER_CHARSET', 'utf8mb4'),
+            'collation' => env('DB_ZANJEER_COLLATION', 'utf8mb4_unicode_ci'),
+            'prefix' => '',
+            'prefix_indexes' => true,
+            'strict' => false,
+            'engine' => null,
+        ],
+
         'sqlite' => [
             'driver' => 'sqlite',
             'url' => env('DB_URL'),

@@ -117,17 +117,21 @@
                         Scraping Loyihalar
                     </div>
                     <nav class="nav flex-column">
-                        <a class="nav-link" href="/scrape-eombor" target="_blank" id="nav-page1">
-                            <i class="fas fa-warehouse me-2"></i>
-                            E-Ombor Scraper
+                         <a class="nav-link" href="/autos" target="_blank" id="nav-page4">
+                            <i class="fas fa-globe-europe me-2"></i>
+                            Autos
                         </a>
-                        <a class="nav-link" href="/mintrans-litsenziya" target="_blank" id="nav-page2">
-                            <i class="fas fa-database me-2"></i>
-                            Mintrans Litzenziya
-                        </a>
-                        <a class="nav-link" href="/mintrans-auto" target="_blank" id="nav-page3">
+                         <a class="nav-link" href="/mintrans-auto" target="_blank" id="nav-page3">
                             <i class="fas fa-search me-2"></i>
                             Mintrans Avtoraqam
+                        </a>
+                           <a class="nav-link" href="/qozoq" target="_blank" id="nav-page6">
+                            <i class="fas fa-file-alt me-2"></i>
+                            Qozoq Scraper
+                        </a>
+                        <a class="nav-link" href="/check-qozoq" target="_blank" id="nav-page6">
+                            <i class="fas fa-file-alt me-2"></i>
+                            Qozoq Tekshirilgan
                         </a>
                         <a class="nav-link" href="/belarus" target="_blank" id="nav-page4">
                             <i class="fas fa-globe-europe me-2"></i>
@@ -137,14 +141,30 @@
                             <i class="fas fa-flag me-2"></i>
                             Turkiya Gruziya
                         </a>
-                        <!-- <a class="nav-link" href="/page6" target="_blank" id="nav-page6">
-                            <i class="fas fa-file-alt me-2"></i>
-                            Page 6
-                        </a>
-                        <a class="nav-link" href="/page7" target="_blank" id="nav-page7">
+                        <a class="nav-link" href="/zitic" target="_blank" id="nav-page7">
                             <i class="fas fa-download me-2"></i>
-                            Page 7
-                        </a> -->
+                            Zitic Scraper
+                        </a>
+                        <a class="nav-link" href="/zanjeer" target="_blank" id="nav-page4">
+                            <i class="fas fa-globe-europe me-2"></i>
+                            Zanjeer Scraper
+                        </a>
+                        <a class="nav-link" href="/orginfo" target="_blank" id="nav-page7">
+                            <i class="fas fa-download me-2"></i>
+                            Orginfo Scraper
+                        </a>
+                        <a class="nav-link" href="{{ route('upload-zanjeer') }}" target="_blank" id="nav-page7">
+                            <i class="fas fa-download me-2"></i>
+                            Qozoq Tekshirilgan Converter
+                        </a>
+                        <a class="nav-link" href="{{ route('eOmborConverter') }}" target="_blank" id="nav-page7">
+                            <i class="fas fa-download me-2"></i>
+                            E Ombor Converter
+                        </a>
+                        <a class="nav-link" href="{{ route('turkiyaConverter') }}" target="_blank" id="nav-page7">
+                            <i class="fas fa-download me-2"></i>
+                            Turkiya Converter
+                        </a>
                     </nav>
                 </div>
             </div>

@@ -251,6 +251,7 @@
         }
     </style>
 </head>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <body>
     <div class="container-fluid">
         <div class="row">
@@ -295,14 +296,43 @@
                                             </h5>
                                         </div>
                                         <div class="card-body p-4">
-                                            <form id="scrapeForm" action="{{ route('turkey.scrape') }}" method="POST">
-                                                @csrf
+                                               <div class="card-body p-4">
+                                            <div class="d-flex gap-2 mb-3">
+                                                <button type="button" class="btn btn-outline-primary" 
+                                                    onclick="window.open('https://www.hopatirparki.com/tirparki/arhavilimansiragumruklu.asp', '_blank')">
+                                                    <i class="fas fa-globe"></i>
+                                                    Saytga o'tish
+                                                </button>
+
+                                                <button type="button" class="btn btn-outline-secondary"
+                                                    onclick="copyLink()">
+                                                    <i class="fas fa-copy"></i>
+                                                    Linkni nusxalash
+                                                </button>
+                                            </div>
+                                            <script>
+                                                function copyLink() {
+                                                    navigator.clipboard.writeText('https://www.hopatirparki.com/tirparki/arhavilimansiragumruklu.asp');
+
+                                                    Swal.fire({
+                                                        toast: true,
+                                                        position: 'top-end',
+                                                        icon: 'success',
+                                                        title: 'Link nusxalandi!',
+                                                        showConfirmButton: false,
+                                                        timer: 2000,
+                                                        timerProgressBar: true
+                                                    });
+                                                }
+                                            </script>
+                                            <form id="scrapeForm" >
                                                 <div class="d-grid gap-2">
                                                     <button type="submit" class="btn btn-primary btn-lg py-3" id="submitBtn">
                                                         <i class="fas fa-rocket me-2"></i>
                                                         Scrapingni Boshlash
                                                         <i class="fas fa-arrow-right ms-2"></i>
                                                     </button>
+                                                    <div id="scrapeStatus" class="mt-3 text-center fw-bold"></div>
                                                 </div>
                                             </form>
 
@@ -312,149 +342,31 @@
                                             </div>
                                         </div>
                                     </div>
+                                      <div id="status" class="mt-3"></div>
+                                    <div class="card-body p-4">
+                                        <form id="belarusSelect">
+                                            <div class="mb-4">
+                                                <label for="region" class="form-label fw-bold">
+                                                    <i class="fas fa-globe me-2 text-primary"></i>Yuklab olish uchun fayl tanlang:
+                                                </label>
+                                                <select name="region" id="region" class="form-select form-select-lg" required>
+                                                    <option value="">-- Fayllar --</option>
+                                                </select>
+                                                <div class="form-text">
+                                                    <i class="fas fa-info-circle me-1"></i>
+                                                    Yuklab olish uchun fayl tanlang
+                                                </div>
+                                            </div>
 
-                                    <!-- Filter Form -->
-                                    <div class="filter-form mt-4">
-                                        <form action="{{ route('turkey.index') }}" method="GET">
-                                            <div class="row g-3">
-                                                <div class="col-md-4">
-                                                    <input type="text" name="search" class="form-control" placeholder="Mashina raqami bo'yicha qidirish" value="{{ request('search') }}">
-                                                </div>
-                                                <div class="col-md-4">
-                                                    <select name="region_filter" class="form-select">
-                                                        <option value="">Barcha kirish joylari</option>
-                                                        <option value="Arhavi" {{ request('region_filter') == 'Arhavi' ? 'selected' : '' }}>Arhavi</option>
-                                                        <!-- Boshqa kirish joylari bo'lsa, bu yerga qo'shing -->
-                                                    </select>
-                                                </div>
-                                                <div class="col-md-4">
-                                                    <button type="submit" class="btn btn-primary w-100">
-                                                        <i class="fas fa-search me-2"></i>Filtrlash
-                                                    </button>
-                                                </div>
+                                            <div class="d-grid gap-2">
+                                                <button type="submit" class="btn btn-primary btn-lg py-3" id="Download">
+                                                    <i class="fas fa-download me-2" aria-hidden="true"></i>
+                                                    Yuklab Olish
+                                                </button>
                                             </div>
                                         </form>
-                                    </div>
-
-                                    <!-- Database Data Display -->
-                                    <div class="data-table-container mt-5">
-                                        <div class="card shadow-sm">
-                                            <div class="card-header">
-                                                <h5 class="mb-0">
-                                                    <i class="fas fa-database me-2"></i>
-                                                    Saqlangan Ma'lumotlar
-                                                    @if(isset($allData) && $allData->total() > 0)
-                                                        <span class="badge bg-light text-dark ms-2">{{ $allData->total() }} ta yozuv</span>
-                                                    @endif
-                                                </h5>
-                                            </div>
-                                            <div class="card-body p-4">
-                                                @if(isset($allData) && $allData->isEmpty())
-                                                    <div class="alert alert-info" role="alert">
-                                                        <i class="fas fa-info-circle me-2"></i>
-                                                        Hozircha saqlangan ma'lumotlar mavjud emas.
-                                                    </div>
-                                                @elseif(isset($allData))
-                                                    <div class="table-responsive">
-                                                        <table class="table table-hover">
-                                                            <thead>
-                                                                <tr>
-                                                                    <th scope="col" style="width: 120px;">Navbat Raqami</th>
-                                                                    <th scope="col" style="width: 140px;">Avtomobil Raqami</th>
-                                                                    <th scope="col" style="width: 120px;">Sana</th>
-                                                                    <th scope="col" style="width: 120px;">Kirish Joyi</th>
-                                                                    <th scope="col">Korxona Nomi</th>
-                                                                    <th scope="col" style="width: 80px; text-align: center;">Tafsilot</th>
-                                                                </tr>
-                                                            </thead>
-                                                            <tbody>
-                                                                @foreach($allData as $data)
-                                                                    <tr>
-                                                                        <td><span class="value-primary">{{ $data->sira ?? '-' }}</span></td>
-                                                                        <td><strong class="value-success">{{ $data->plaka ?? '-' }}</strong></td>
-                                                                        <td><span class="value-info">{{ $data->tarih ?? '-' }}</span></td>
-                                                                        <td><span class="value-warning">{{ $data->yer ?? '-' }}</span></td>
-                                                                        <td>
-                                                                            <span class="value-danger">
-                                                                                {{ $data->company ? (strlen($data->company) > 40 ? substr($data->company, 0, 40) . '...' : $data->company) : '-' }}
-                                                                            </span>
-                                                                        </td>
-                                                                        <td class="text-center">
-                                                                            <button type="button" class="btn view-details-btn" data-id="{{ $data->id }}" title="Tafsilotlarni ko'rish">
-                                                                                <i class="fas fa-eye"></i>
-                                                                            </button>
-                                                                        </td>
-                                                                    </tr>
-                                                                @endforeach
-                                                            </tbody>
-                                                        </table>
-                                                        <!-- Pagination -->
-                                                        <div class="d-flex justify-content-center mt-4">
-                                                            {{ $allData->appends(request()->query())->links('pagination::bootstrap-5') }}
-                                                        </div>
-                                                    </div>
-                                                @endif
-                                            </div>
+                                        <div id="status" style="margin-top: 15px; font-weight: bold;"></div>
                                         </div>
-                                    </div>
-
-                                    <div class="row mt-4">
-                                        <div class="col-md-6 mb-3">
-                                            <div class="card info-card h-100">
-                                                <div class="card-body">
-                                                    <h5 class="card-title text-primary">
-                                                        <i class="fas fa-cog me-2"></i>Turkey Data Scraper Xususiyatlari
-                                                    </h5>
-                                                    <ul class="list-unstyled mb-0">
-                                                        <li class="mb-2"><i class="fas fa-check text-success me-2"></i>Turkiyadan ma'lumotlarni yig'ish</li>
-                                                        <li class="mb-2"><i class="fas fa-check text-success me-2"></i>Avtomatik va tezkor jarayon</li>
-                                                        <li class="mb-2"><i class="fas fa-check text-success me-2"></i>Natijalarni Excel formatida saqlash</li>
-                                                        <li class="mb-0"><i class="fas fa-check text-success me-2"></i>Xavfsiz va ishonchli tizim</li>
-                                                    </ul>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        
-                                        <div class="col-md-6 mb-3">
-                                            <div class="card info-card h-100">
-                                                <div class="card-body">
-                                                    <h5 class="card-title text-primary">
-                                                        <i class="fas fa-info-circle me-2"></i>Foydalanish Tartibi
-                                                    </h5>
-                                                    <ul class="list-unstyled mb-0">
-                                                        <li class="mb-2"><i class="fas fa-check text-success me-2"></i>"Scrapingni boshlash" tugmasini bosing</li>
-                                                        <li class="mb-2"><i class="fas fa-check text-success me-2"></i>Jarayon yakunlanishini kuting</li>
-                                                        <li class="mb-2"><i class="fas fa-check text-success me-2"></i>Natijalar avtomatik saqlanadi</li>
-                                                        <li class="mb-0"><i class="fas fa-check text-success me-2"></i>Selenium orqali xavfsiz scraping</li>
-                                                    </ul>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <div class="mt-4">
-                                        <div class="card" style="border-left: 4px solid #667eea;">
-                                            <div class="card-body">
-                                                <h5 class="card-title text-primary">
-                                                    <i class="fas fa-lightbulb me-2"></i>Muhim ma'lumotlar:
-                                                </h5>
-                                                <div class="row">
-                                                    <div class="col-md-6">
-                                                        <ul class="list-unstyled mb-0">
-                                                            <li class="mb-2"><i class="fas fa-download text-info me-2"></i>Natijalar Excel fayl sifatida yuklanadi</li>
-                                                            <li class="mb-2"><i class="fas fa-robot text-info me-2"></i>Selenium orqali scraping</li>
-                                                        </ul>
-                                                    </div>
-                                                    <div class="col-md-6">
-                                                        <ul class="list-unstyled mb-0">
-                                                            <li class="mb-2"><i class="fas fa-clock text-info me-2"></i>Jarayon vaqt talab qiladi</li>
-                                                            <li class="mb-0"><i class="fas fa-shield-alt text-info me-2"></i>Xavfsiz va tezkor ishlaydi</li>
-                                                        </ul>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -464,268 +376,200 @@
         </div>
     </div>
 
-    <!-- Details Modal -->
-    <div class="modal fade" id="detailsModal" tabindex="-1" aria-labelledby="detailsModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-lg">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="detailsModalLabel">
-                        <i class="fas fa-info-circle me-2"></i>
-                        Ma'lumot tafsilotlari
-                    </h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body" id="modalBodyContent">
-                    <div class="d-flex justify-content-center align-items-center" style="height: 200px;">
-                        <div class="spinner-border text-primary" role="status">
-                            <span class="visually-hidden">Yuklanmoqda...</span>
-                        </div>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
-                        <i class="fas fa-times me-2"></i>Yopish
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
-
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            const scrapeForm = document.getElementById('scrapeForm');
-            const submitBtn = document.getElementById('submitBtn');
-            const loadingIndicator = document.getElementById('loadingIndicator');
-            const detailsModal = new bootstrap.Modal(document.getElementById('detailsModal'));
+<script>
 
-            // Scraping form submission
-            if (scrapeForm) {
-                scrapeForm.addEventListener('submit', function(e) {
-                    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Iltimos kuting...';
-                    submitBtn.disabled = true;
-                    loadingIndicator.classList.add('show');
-                });
-            }
+// ================= SCRAPE + AUTO DOWNLOAD =================
 
-            // Details button click handlers
-            document.addEventListener('click', function(e) {
-                if (e.target.closest('.view-details-btn')) {
-                    const btn = e.target.closest('.view-details-btn');
-                    const id = btn.getAttribute('data-id');
-                    loadDetails(id);
+document
+.getElementById('scrapeForm')
+.addEventListener('submit', async function(e) {
+
+    e.preventDefault();
+
+    const submitBtn =
+        document.getElementById('submitBtn');
+
+    const loading =
+        document.getElementById('loadingIndicator');
+
+    const statusDiv =
+        document.getElementById('scrapeStatus');
+
+    submitBtn.disabled = true;
+
+    loading.classList.add('show');
+
+    statusDiv.innerHTML =
+        '⏳ Scraping boshlandi...';
+
+    try {
+
+        const response = await fetch(
+            '{{ route("turkey.scrape") }}',
+            {
+                method: 'POST',
+                headers: {
+                    'X-CSRF-TOKEN':
+                        document.querySelector(
+                            'meta[name="csrf-token"]'
+                        ).content
                 }
+            }
+        );
+
+        if (!response.ok) {
+
+            throw new Error(
+                'Excel yaratilmadi'
+            );
+        }
+
+        // ===== FILE DOWNLOAD =====
+
+        const blob =
+            await response.blob();
+
+        const url =
+            window.URL.createObjectURL(blob);
+
+        const a =
+            document.createElement('a');
+
+        a.href = url;
+
+        // backenddagi filename
+        const disposition =
+            response.headers.get(
+                'Content-Disposition'
+            );
+
+        let fileName =
+            'turkey.xlsx';
+
+        if (
+            disposition &&
+            disposition.includes('filename=')
+        ) {
+
+            fileName =
+                disposition
+                    .split('filename=')[1]
+                    .replace(/"/g, '');
+        }
+
+        a.download = fileName;
+
+        document.body.appendChild(a);
+
+        a.click();
+
+        a.remove();
+
+        window.URL.revokeObjectURL(url);
+
+        statusDiv.innerHTML =
+            '✅ Excel muvaffaqiyatli yuklandi';
+
+        // 🔄 FILE LIST REFRESH
+        loadFiles();
+
+    } catch (error) {
+
+        console.error(error);
+
+        statusDiv.innerHTML =
+            '❌ Xatolik yuz berdi';
+    }
+
+    submitBtn.disabled = false;
+
+    loading.classList.remove('show');
+
+});
+
+// ================= FILE LIST =================
+
+async function loadFiles() {
+
+    const fileSelect =
+        document.getElementById('region');
+
+    try {
+
+        const response = await fetch(
+            '{{ route("turkey.files") }}'
+        );
+
+        const data =
+            await response.json();
+
+        fileSelect.innerHTML =
+            '<option value="">-- Fayllar --</option>';
+
+        if (
+            data.status &&
+            Array.isArray(data.files)
+        ) {
+
+            data.files.forEach(file => {
+
+                const option =
+                    document.createElement('option');
+
+                option.value = file;
+
+                option.textContent = file;
+
+                fileSelect.appendChild(option);
             });
-
-            // Load details function
-            function loadDetails(id) {
-                const modalBody = document.getElementById('modalBodyContent');
-                
-                // Show loading state
-                modalBody.innerHTML = `
-                    <div class="d-flex justify-content-center align-items-center" style="height: 200px;">
-                        <div class="spinner-border text-primary" role="status">
-                            <span class="visually-hidden">Yuklanmoqda...</span>
-                        </div>
-                    </div>
-                `;
-                
-                // Show modal
-                detailsModal.show();
-                
-                // Fetch data
-                fetch(`/turkey/details/${id}`, {
-                    method: 'GET',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
-                    }
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        renderDetailsModal(data.data);
-                    } else {
-                        showError('Ma\'lumot yuklanmadi: ' + (data.message || 'Noma\'lum xato'));
-                    }
-                })
-                .catch(error => {
-                    console.error('Error:', error);
-                    showError('Ma\'lumot yuklashda xatolik yuz berdi');
-                });
-            }
-
-            // Render details in modal
-            function renderDetailsModal(data) {
-                const modalBody = document.getElementById('modalBodyContent');
-                
-                modalBody.innerHTML = `
-                    <!-- Asosiy Ma'lumotlar -->
-                    <div class="data-group transport">
-                        <div class="data-group-title">
-                            <i class="fas fa-car text-success"></i>
-                            Asosiy Ma'lumotlar
-                        </div>
-                        <div class="data-row">
-                            <span class="data-label">Tartib raqami:</span>
-                            <span class="data-value value-primary">${data.sira || '-'}</span>
-                        </div>
-                        <div class="data-row">
-                            <span class="data-label">Kirish tartib raqami:</span>
-                            <span class="data-value value-info">${data.giris || '-'}</span>
-                        </div>
-                        <div class="data-row">
-                            <span class="data-label">Avtomobil raqami:</span>
-                            <span class="data-value value-success"><strong>${data.plaka || '-'}</strong></span>
-                        </div>
-                        <div class="data-row">
-                            <span class="data-label">Kirish sanasi:</span>
-                            <span class="data-value value-warning">${data.tarih || '-'}</span>
-                        </div>
-                        <div class="data-row">
-                            <span class="data-label">Kirish joyi:</span>
-                            <span class="data-value value-danger">${data.yer || '-'}</span>
-                        </div>
-                    </div>
-
-                    <!-- Transport Ma'lumotlari -->
-                    <div class="data-group transport">
-                        <div class="data-group-title">
-                            <i class="fas fa-truck text-success"></i>
-                            Transport Ma'lumotlari
-                        </div>
-                        <div class="data-row">
-                            <span class="data-label">Rusumi:</span>
-                            <span class="data-value value-primary">${data.rusumi || '-'}</span>
-                        </div>
-                        <div class="data-row">
-                            <span class="data-label">Yuk ko'tarish qobiliyati:</span>
-                            <span class="data-value value-info">${data.yuk_qobiliyati || '-'}</span>
-                        </div>
-                        <div class="data-row">
-                            <span class="data-label">Transport turi:</span>
-                            <span class="data-value value-success">${data.transport_turi || '-'}</span>
-                        </div>
-                        <div class="data-row">
-                            <span class="data-label">Yuk turi:</span>
-                            <span class="data-value value-warning">${data.yuk_turi || '-'}</span>
-                        </div>
-                    </div>
-
-                    <!-- Litsenziya Ma'lumotlari -->
-                    <div class="data-group license">
-                        <div class="data-group-title">
-                            <i class="fas fa-certificate text-danger"></i>
-                            Litsenziya Ma'lumotlari
-                        </div>
-                        <div class="data-row">
-                            <span class="data-label">Litsenziya varaqasi:</span>
-                            <span class="data-value value-danger">${data.license || '-'}</span>
-                        </div>
-                        <div class="data-row">
-                            <span class="data-label">Davlat raqami:</span>
-                            <span class="data-value value-primary">${data.state_number || '-'}</span>
-                        </div>
-                        <div class="data-row">
-                            <span class="data-label">Berilgan sana:</span>
-                            <span class="data-value value-info">${data.berilgan_sana || '-'}</span>
-                        </div>
-                        <div class="data-row">
-                            <span class="data-label">Amal qilish muddati:</span>
-                            <span class="data-value value-warning">${data.amal_muddati || '-'}</span>
-                        </div>
-                        <div class="data-row">
-                            <span class="data-label">Holati:</span>
-                            <span class="data-value ${getStatusColor(data.holati)}">${data.holati || '-'}</span>
-                        </div>
-                        <div class="data-row">
-                            <span class="data-label">Hududiy boshqarma:</span>
-                            <span class="data-value value-muted">${data.hududiy_boshqarma || '-'}</span>
-                        </div>
-                    </div>
-
-                    <!-- Korxona Ma'lumotlari -->
-                    <div class="data-group company">
-                        <div class="data-group-title">
-                            <i class="fas fa-building text-warning"></i>
-                            Korxona Ma'lumotlari
-                        </div>
-                        <div class="data-row">
-                            <span class="data-label">Korxona nomi:</span>
-                            <span class="data-value value-danger">${data.company || '-'}</span>
-                        </div>
-                        <div class="data-row">
-                            <span class="data-label">Telefon raqami:</span>
-                            <span class="data-value value-success">${data.phone_number || '-'}</span>
-                        </div>
-                        <div class="data-row">
-                            <span class="data-label">Faoliyat turi:</span>
-                            <span class="data-value value-info">${data.faoliyat_turi || '-'}</span>
-                        </div>
-                    </div>
-
-                    <!-- Tizim Ma'lumotlari -->
-                    <div class="data-group system">
-                        <div class="data-group-title">
-                            <i class="fas fa-cog text-muted"></i>
-                            Tizim Ma'lumotlari
-                        </div>
-                        <div class="data-row">
-                            <span class="data-label">Qo'shilgan vaqt:</span>
-                            <span class="data-value value-muted">${data.created_at || '-'}</span>
-                        </div>
-                        <div class="data-row">
-                            <span class="data-label">Oxirgi yangilanish:</span>
-                            <span class="data-value value-muted">${data.updated_at || '-'}</span>
-                        </div>
-                    </div>
-                `;
-            }
-
-            // Get status color based on value
-            function getStatusColor(status) {
-                if (!status) return 'value-muted';
-                const statusLower = status.toLowerCase();
-                if (statusLower.includes('faol') || statusLower.includes('active')) {
-                    return 'value-success';
-                } else if (statusLower.includes('muddati') || statusLower.includes('expired')) {
-                    return 'value-danger';
-                } else if (statusLower.includes('kutish') || statusLower.includes('pending')) {
-                    return 'value-warning';
-                } else {
-                    return 'value-info';
-                }
-            }
-
-            // Show error in modal
-            function showError(message) {
-                const modalBody = document.getElementById('modalBodyContent');
-                modalBody.innerHTML = `
-                    <div class="alert alert-danger" role="alert">
-                        <i class="fas fa-exclamation-triangle me-2"></i>
-                        ${message}
-                    </div>
-                `;
-            }
-
-            // Auto refresh functionality (optional)
-            const urlParams = new URLSearchParams(window.location.search);
-            if (urlParams.get('autorefresh') === '1') {
-                setTimeout(() => {
-                    window.location.reload();
-                }, 30000); // 30 seconds
-            }
-        });
-
-        // Global function for manual refresh
-        function refreshPage() {
-            window.location.reload();
         }
 
-        // Export to Excel function (if needed)
-        function exportToExcel() {
-            window.location.href = '{{ route("turkey.scrape") }}';
-        }
-    </script>
+    } catch (error) {
+
+        console.error(error);
+    }
+}
+
+// ================= MANUAL DOWNLOAD =================
+
+document
+.getElementById('belarusSelect')
+.addEventListener('submit', function(e) {
+
+    e.preventDefault();
+
+    const select =
+        document.getElementById('region');
+
+    const status =
+        document.getElementById('status');
+
+    if (!select.value) {
+
+        status.innerHTML =
+            '❌ Fayl tanlanmadi';
+
+        return;
+    }
+
+    status.innerHTML =
+        '📦 Yuklab olinmoqda...';
+
+    window.location.href =
+        `/api/turkey/download/${
+            encodeURIComponent(select.value)
+        }`;
+
+});
+
+// PAGE LOAD
+document.addEventListener(
+    'DOMContentLoaded',
+    loadFiles
+);
+
+</script>
+
 </body>
 </html>

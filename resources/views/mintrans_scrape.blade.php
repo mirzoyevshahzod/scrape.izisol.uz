@@ -68,6 +68,7 @@
         }
     </style>
 </head>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <body>
     <div class="container-fluid">
         <div class="row">
@@ -88,7 +89,7 @@
                                         <p class="page-subtitle">Mintrans litsenziya raqamlari bo'yicha ma'lumotlarni avtomatik olish tizimi</p>
                                     </div>
                                     
-                                    @if(session('error'))
+                                    @if(session(key: 'error'))
                                         <div class="alert alert-danger alert-dismissible fade show" role="alert">
                                             <i class="fas fa-exclamation-triangle me-2"></i>
                                             {{ session('error') }}
@@ -112,7 +113,36 @@
                                             </h5>
                                         </div>
                                         <div class="card-body p-4">
-                                            <form action="{{ route('submit') }}" method="POST" id="logisticsForm">
+                                             <div class="card-body p-4">
+                                            <div class="d-flex gap-2 mb-3">
+                                                <button type="button" class="btn btn-outline-primary" 
+                                                    onclick="window.open('https://info.mintrans.uz/#/info/onSearch', '_blank')">
+                                                    <i class="fas fa-globe"></i>
+                                                    Saytga o'tish
+                                                </button>
+
+                                                <button type="button" class="btn btn-outline-secondary"
+                                                    onclick="copyLink()">
+                                                    <i class="fas fa-copy"></i>
+                                                    Linkni nusxalash
+                                                </button>
+                                            </div>
+                                            <script>
+                                                function copyLink() {
+                                                    navigator.clipboard.writeText('https://info.mintrans.uz/#/info/onSearch');
+
+                                                    Swal.fire({
+                                                        toast: true,
+                                                        position: 'top-end',
+                                                        icon: 'success',
+                                                        title: 'Link nusxalandi!',
+                                                        showConfirmButton: false,
+                                                        timer: 2000,
+                                                        timerProgressBar: true
+                                                    });
+                                                }
+                                            </script>
+                                            <form id="logisticsForm">
                                                 @csrf
                                                 <div class="row">
                                                     <div class="col-md-6 mb-4">
@@ -176,6 +206,49 @@
                                             </form>
                                         </div>
                                     </div>
+                                    <div id="progressContainer" class="mt-4 d-none">
+
+                                    <div class="text-center mb-3">
+                                        <div class="spinner-border text-primary" role="status"></div>
+                                        <p class="mt-2">Scraping davom etmoqda...</p>
+                                    </div>
+
+                                    <div class="progress" style="height: 25px;">
+                                        <div id="progressBar"
+                                            class="progress-bar progress-bar-striped progress-bar-animated"
+                                            role="progressbar"
+                                            style="width: 0%">
+                                            0%
+                                        </div>
+                                    </div>
+
+                                </div>
+                                    <div class="card-body p-4">
+                                        <form id="belarusSelect">
+                                            @csrf
+                                            <div class="mb-4">
+                                                <label for="region" class="form-label fw-bold">
+                                                    <i class="fas fa-globe me-2 text-primary"></i>Yuklab olish uchun fayl tanlang:
+                                                </label>
+                                                <select name="region" id="region" class="form-select form-select-lg" required>
+                                                    <option value="">-- Fayllar --</option>
+                                                </select>
+                                                <div class="form-text">
+                                                    <i class="fas fa-info-circle me-1"></i>
+                                                    Yuklab olish uchun fayl tanlang
+                                                </div>
+                                            </div>
+
+                                            <div class="d-grid gap-2">
+                                                <button type="submit" class="btn btn-primary btn-lg py-3" id="Download">
+                                                    <i class="fas fa-download me-2" aria-hidden="true"></i>
+                                                    Yuklab Olish
+                                                </button>
+                                            </div>
+                                        </form>
+                                        <div id="status" style="margin-top: 15px; font-weight: bold;"></div>
+                                        </div>
+
 
                                     <div class="row mt-4">
                                         <div class="col-md-6 mb-3">
@@ -244,76 +317,142 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            const logisticsForm = document.getElementById('logisticsForm');
-            const submitBtn = document.getElementById('submitBtn');
-            
-            if (logisticsForm) {
-                logisticsForm.addEventListener('submit', function(e) {
-                    const idInput = document.getElementById('id');
-                    const countInput = document.getElementById('count');
-                    
-                    // Clear previous errors
-                    document.querySelectorAll('.is-invalid').forEach(el => el.classList.remove('is-invalid'));
+<script>
+document.getElementById('logisticsForm').addEventListener('submit', async function(e) {
 
-                    let hasError = false;
+    e.preventDefault();
 
-                    // ID validation
-                    if (!/^\d{7,8}$/.test(idInput.value)) {
-                        idInput.classList.add('is-invalid');
-                        hasError = true;
-                    }
+    const formData = new FormData(this);
 
-                    // Count validation
-                    if (countInput.value <= 0 || !Number.isInteger(Number(countInput.value))) {
-                        countInput.classList.add('is-invalid');
-                        hasError = true;
-                    }
+    const status = document.getElementById('status');
+    const progressContainer = document.getElementById('progressContainer');
+    const progressBar = document.getElementById('progressBar');
 
-                    if (hasError) {
-                        e.preventDefault();
-                        // Scroll to first error
-                        const firstError = document.querySelector('.is-invalid');
-                        if (firstError) {
-                            firstError.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                            firstError.focus();
-                        }
-                    } else {
-                        // Show loading state
-                        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Iltimos kuting...';
-                        submitBtn.disabled = true;
-                    }
-                });
+    status.innerText = "⏳ Scraping boshlandi...";
+    progressContainer.classList.remove('d-none');
 
-                // Real-time validation
-                const idInput = document.getElementById('id');
-                const countInput = document.getElementById('count');
+    let percent = 0;
 
-                if (idInput) {
-                    idInput.addEventListener('input', function() {
-                        if (/^\d{7,8}$/.test(this.value)) {
-                            this.classList.remove('is-invalid');
-                            this.classList.add('is-valid');
-                        } else {
-                            this.classList.remove('is-valid');
-                        }
-                    });
-                }
+    const fakeProgress = setInterval(() => {
 
-                if (countInput) {
-                    countInput.addEventListener('input', function() {
-                        const value = parseInt(this.value);
-                        if (value >= 1) {
-                            this.classList.remove('is-invalid');
-                            this.classList.add('is-valid');
-                        } else {
-                            this.classList.remove('is-valid');
-                        }
-                    });
-                }
-            }
-        });
-    </script>
+        if (percent < 90) {
+            percent += Math.random() * 5;
+            percent = Math.min(percent, 90);
+
+            progressBar.style.width = percent + "%";
+            progressBar.innerText = Math.floor(percent) + "%";
+        }
+
+    }, 1000);
+
+    const res = await fetch('/api/mintrans/submit', {
+        method: 'POST',
+        body: formData
+    });
+
+    const data = await res.json();
+    const jobId = data.job_id;
+
+    const interval = setInterval(async () => {
+
+        const check = await fetch(`/api/mintrans/check/${jobId}`);
+        const result = await check.json();
+
+        if(result.status === 'ready'){
+
+            clearInterval(interval);
+            clearInterval(fakeProgress);
+
+            progressBar.style.width = "100%";
+            progressBar.innerText = "100%";
+
+            status.innerText = "✅ Tayyor! Fayl yuklanmoqda...";
+
+            const a = document.createElement('a');
+            a.href = result.download_url;
+            a.click();
+        }
+
+    },5000);
+
+});
+document.addEventListener('DOMContentLoaded', async () => {
+    const select = document.getElementById('region');
+    const form = document.getElementById('belarusSelect');
+    const status = document.getElementById('status');
+
+    // --- 1. Fayllarni yuklab olish ---
+    try {
+        status.textContent = "Fayllar yuklanmoqda...";
+
+        const response = await fetch("https://scrape.izisol.uz/api/mintrans/all-files");
+        const data = await response.json();
+
+        select.innerHTML = '<option value="">-- Faylni tanlang --</option>';
+
+        if (data.status && Array.isArray(data.files)) {
+            data.files.forEach(file => {
+                const option = document.createElement('option');
+                option.value = file;
+                option.textContent = file;
+                select.appendChild(option);
+            });
+            status.textContent = "✅ Fayllar yuklandi";
+        } else {
+            status.textContent = "⚠️ Fayllar topilmadi";
+        }
+
+    } catch (error) {
+        console.error(error);
+        status.textContent = "❌ Fayllarni yuklashda xatolik";
+    }
+
+    // --- 2. Yuklab olish ---
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const fileName = select.value;
+
+        if (!fileName) {
+            alert("Iltimos, faylni tanlang!");
+            return;
+        }
+
+        status.textContent = "📦 Yuklab olinmoqda...";
+
+        try {
+            const response = await fetch("https://scrape.izisol.uz/api/mintrans/download", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Accept": "application/json"
+                },
+                body: JSON.stringify({ file: fileName })
+            });
+
+            if (!response.ok) throw new Error("Server xatosi yoki fayl topilmadi");
+
+            // Blob (binary data) olish
+            const blob = await response.blob();
+
+            // Faylni avtomatik yuklab olish
+            const downloadUrl = window.URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = downloadUrl;
+            a.download = fileName; // nomini avtomatik qo‘yadi
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            window.URL.revokeObjectURL(downloadUrl);
+
+            status.textContent = "✅ Fayl muvaffaqiyatli yuklandi";
+
+        } catch (error) {
+            console.error(error);
+            status.textContent = "❌ Yuklab olishda xatolik yuz berdi";
+        }
+    });
+});
+</script>
+
 </body>
 </html>

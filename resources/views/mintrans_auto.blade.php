@@ -86,6 +86,7 @@
         }
     </style>
 </head>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <body>
     <div class="container-fluid">
         <div class="row">
@@ -130,7 +131,36 @@
                                             </h5>
                                         </div>
                                         <div class="card-body p-4">
-                                            <form id="uploadForm" action="{{ route('upload.store') }}" method="POST" enctype="multipart/form-data">
+                                               <div class="card-body p-4">
+                                            <div class="d-flex gap-2 mb-3">
+                                                <button type="button" class="btn btn-outline-primary" 
+                                                    onclick="window.open('https://info.mintrans.uz/#/info/onSearch', '_blank')">
+                                                    <i class="fas fa-globe"></i>
+                                                    Saytga o'tish
+                                                </button>
+
+                                                <button type="button" class="btn btn-outline-secondary"
+                                                    onclick="copyLink()">
+                                                    <i class="fas fa-copy"></i>
+                                                    Linkni nusxalash
+                                                </button>
+                                            </div>
+                                            <script>
+                                                function copyLink() {
+                                                    navigator.clipboard.writeText('https://info.mintrans.uz/#/info/onSearch');
+
+                                                    Swal.fire({
+                                                        toast: true,
+                                                        position: 'top-end',
+                                                        icon: 'success',
+                                                        title: 'Link nusxalandi!',
+                                                        showConfirmButton: false,
+                                                        timer: 2000,
+                                                        timerProgressBar: true
+                                                    });
+                                                }
+                                            </script>
+                                            <form id="uploadForm" enctype="multipart/form-data">
                                                 @csrf
                                                 <div class="upload-area" id="uploadArea">
                                                     <div class="mb-4">
@@ -185,6 +215,32 @@
                                             </form>
                                         </div>
                                     </div>
+                                      <div class="card-body p-4">
+                                        <form id="belarusSelect">
+                                            @csrf
+                                            <div class="mb-4">
+                                                <label for="region" class="form-label fw-bold">
+                                                    <i class="fas fa-globe me-2 text-primary"></i>Yuklab olish uchun fayl tanlang:
+                                                </label>
+                                                <select name="region" id="region" class="form-select form-select-lg" required>
+                                                    <option value="">-- Fayllar --</option>
+                                                </select>
+                                                <div class="form-text">
+                                                    <i class="fas fa-info-circle me-1"></i>
+                                                    Yuklab olish uchun fayl tanlang
+                                                </div>
+                                            </div>
+
+                                            <div class="d-grid gap-2">
+                                                <button type="submit" class="btn btn-primary btn-lg py-3" id="Download">
+                                                    <i class="fas fa-download me-2" aria-hidden="true"></i>
+                                                    Yuklab Olish
+                                                </button>
+                                            </div>
+                                        </form>
+                                        <div id="status" style="margin-top: 15px; font-weight: bold;"></div>
+                                        </div>
+
 
                                     <div class="row mt-4">
                                         <div class="col-md-6 mb-3">
@@ -251,145 +307,227 @@
             </div>
         </div>
     </div>
-
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            const uploadArea = document.getElementById('uploadArea');
-            const fileInput = document.getElementById('fileInput');
-            const fileInfo = document.getElementById('fileInfo');
-            const fileName = document.getElementById('fileName');
-            const fileSize = document.getElementById('fileSize');
-            const uploadBtn = document.getElementById('uploadBtn');
-            const btnText = document.getElementById('btnText');
-            const removeFile = document.getElementById('removeFile');
-            const progressContainer = document.getElementById('progressContainer');
-            const progressBar = document.getElementById('progressBar');
-            const progressPercent = document.getElementById('progressPercent');
-            const successMessage = document.getElementById('successMessage');
-            let selectedFile = null;
+document.addEventListener('DOMContentLoaded', function() {
+    const uploadArea = document.getElementById('uploadArea');
+    const fileInput = document.getElementById('fileInput');
+    const fileInfo = document.getElementById('fileInfo');
+    const fileName = document.getElementById('fileName');
+    const fileSize = document.getElementById('fileSize');
+    const uploadBtn = document.getElementById('uploadBtn');
+    const btnText = document.getElementById('btnText');
+    const removeFile = document.getElementById('removeFile');
+    const progressContainer = document.getElementById('progressContainer');
+    const progressBar = document.getElementById('progressBar');
+    const progressPercent = document.getElementById('progressPercent');
+    const successMessage = document.getElementById('successMessage');
+    let selectedFile = null;
+    let jobId = null;
 
-            // Drag and drop functionality
-            uploadArea.addEventListener('dragover', (e) => {
-                e.preventDefault();
-                uploadArea.classList.add('drag-over');
+    // Drag & Drop hodisalari
+    uploadArea.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        uploadArea.classList.add('drag-over');
+    });
+    uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('drag-over'));
+    uploadArea.addEventListener('drop', (e) => {
+        e.preventDefault();
+        uploadArea.classList.remove('drag-over');
+        if (e.dataTransfer.files.length > 0) handleFileSelect(e.dataTransfer.files[0]);
+    });
+
+    // Fayl input hodisasi
+    fileInput.addEventListener('change', (e) => {
+        if (e.target.files.length > 0) handleFileSelect(e.target.files[0]);
+    });
+
+    function handleFileSelect(file) {
+        const validExt = ['.xlsx', '.xls', '.csv'];
+        const ext = '.' + file.name.split('.').pop().toLowerCase();
+
+        if (!validExt.includes(ext)) {
+            alert('Faqat .xlsx, .xls, yoki .csv fayllar qabul qilinadi!');
+            return;
+        }
+
+        selectedFile = file;
+        fileName.textContent = file.name;
+        fileSize.textContent = formatFileSize(file.size);
+        fileInfo.classList.remove('hidden');
+        uploadBtn.disabled = false;
+        btnText.textContent = 'Faylni Yuklash';
+        uploadArea.classList.add('file-uploaded');
+    }
+
+    removeFile.addEventListener('click', () => {
+        selectedFile = null;
+        fileInput.value = '';
+        fileInfo.classList.add('hidden');
+        uploadBtn.disabled = true;
+        btnText.textContent = 'Avval fayl tanlang';
+        uploadArea.classList.remove('file-uploaded');
+    });
+
+    // Upload bosilganda APIga yuborish
+    document.getElementById('uploadForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        if (!selectedFile) return alert('Iltimos, fayl tanlang!');
+
+        progressContainer.classList.remove('hidden');
+        progressBar.style.width = '0%';
+        progressPercent.textContent = '0%';
+        btnText.textContent = 'Yuklanmoqda...';
+        uploadBtn.disabled = true;
+
+        const formData = new FormData();
+        formData.append('excel_file', selectedFile);
+
+        try {
+            const res = await fetch('/api/upload', {
+                method: 'POST',
+                body: formData
             });
 
-            uploadArea.addEventListener('dragleave', () => {
-                uploadArea.classList.remove('drag-over');
-            });
+            if (!res.ok) throw new Error('Server bilan aloqa xatosi');
+            const data = await res.json();
 
-            uploadArea.addEventListener('drop', (e) => {
-                e.preventDefault();
-                uploadArea.classList.remove('drag-over');
-                const files = e.dataTransfer.files;
-                if (files.length > 0) {
-                    handleFileSelect(files[0]);
+            jobId = data.job_id;
+            btnText.textContent = 'Qayta ishlanmoqda...';
+
+            // Progress animatsiya
+            animateProgress(40);
+
+            // Har 5 soniyada statusni tekshirish
+            const interval = setInterval(async () => {
+                const checkRes = await fetch(`/api/scrape/check-result/${jobId}`);
+                const checkData = await checkRes.json();
+
+                if (checkData.status === 'ready') {
+                    clearInterval(interval);
+
+                    animateProgress(100);
+
+                    btnText.textContent = 'Yuklab olish tayyor!';
+                    successMessage.classList.remove('hidden');
+
+                    setTimeout(() => {
+                        const a = document.createElement('a');
+                        a.href = checkData.download_url;
+                        a.download = '';
+                        document.body.appendChild(a);
+                        a.click();
+                        a.remove();
+                    }, 1000);
                 }
-            });
+            }, 5000);
 
-            // File input change
-            fileInput.addEventListener('change', (e) => {
-                if (e.target.files.length > 0) {
-                    handleFileSelect(e.target.files[0]);
-                }
-            });
+        } catch (err) {
+            alert('❌ Xato: ' + err.message);
+            btnText.textContent = 'Yana urinib ko‘ring';
+        }
+    });
 
-            // Handle file selection
-            function handleFileSelect(file) {
-                const validTypes = ['.xlsx', '.xls', '.csv'];
-                const fileExtension = '.' + file.name.split('.').pop().toLowerCase();
-
-                if (!validTypes.includes(fileExtension)) {
-                    fileInput.classList.add('is-invalid');
-                    fileInput.nextElementSibling.textContent = 'Iltimos, faqat .xlsx, .xls yoki .csv fayllarni yuklang';
-                    return;
-                }
-
-                selectedFile = file;
-                fileInput.classList.remove('is-invalid');
-                fileInput.classList.add('is-valid');
-                fileInput.files = new DataTransfer().files; // Clear previous files
-                const dataTransfer = new DataTransfer();
-                dataTransfer.items.add(file);
-                fileInput.files = dataTransfer.files; // Set new file
-                fileName.textContent = file.name;
-                fileSize.textContent = formatFileSize(file.size);
-                fileInfo.classList.remove('hidden');
-                uploadBtn.disabled = false;
-                btnText.textContent = 'Faylni Yuklash';
-                uploadArea.classList.add('file-uploaded');
-                progressContainer.classList.add('hidden');
-                successMessage.classList.add('hidden');
+    function animateProgress(target) {
+        let current = parseInt(progressPercent.textContent);
+        const step = () => {
+            if (current < target) {
+                current += 1;
+                progressBar.style.width = current + '%';
+                progressPercent.textContent = current + '%';
+                requestAnimationFrame(step);
             }
+        };
+        requestAnimationFrame(step);
+    }
 
-            // Remove file
-            removeFile.addEventListener('click', () => {
-                selectedFile = null;
-                fileInput.value = '';
-                fileInput.classList.remove('is-valid', 'is-invalid');
-                fileInfo.classList.add('hidden');
-                uploadBtn.disabled = true;
-                btnText.textContent = 'Avval fayl tanlang';
-                uploadArea.classList.remove('file-uploaded');
-                progressContainer.classList.add('hidden');
-                successMessage.classList.add('hidden');
+    function formatFileSize(bytes) {
+        if (bytes < 1024) return bytes + ' B';
+        else if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+        else return (bytes / 1048576).toFixed(1) + ' MB';
+    }
+
+    // Klikda fayl tanlash
+    uploadArea.addEventListener('click', () => fileInput.click());
+});
+</script>
+<script>
+document.addEventListener('DOMContentLoaded', async () => {
+    const select = document.getElementById('region');
+    const form = document.getElementById('belarusSelect');
+    const status = document.getElementById('status');
+
+    // --- 1. Fayllarni yuklab olish ---
+    try {
+        status.textContent = "Fayllar yuklanmoqda...";
+
+        const response = await fetch("https://scrape.izisol.uz/api/scrape/all-files");
+        const data = await response.json();
+
+        select.innerHTML = '<option value="">-- Faylni tanlang --</option>';
+
+        if (data.status && Array.isArray(data.files)) {
+            data.files.forEach(file => {
+                const option = document.createElement('option');
+                option.value = file;
+                option.textContent = file;
+                select.appendChild(option);
+            });
+            status.textContent = "✅ Fayllar yuklandi";
+        } else {
+            status.textContent = "⚠️ Fayllar topilmadi";
+        }
+
+    } catch (error) {
+        console.error(error);
+        status.textContent = "❌ Fayllarni yuklashda xatolik";
+    }
+
+    // --- 2. Yuklab olish ---
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const fileName = select.value;
+
+        if (!fileName) {
+            alert("Iltimos, faylni tanlang!");
+            return;
+        }
+
+        status.textContent = "📦 Yuklab olinmoqda...";
+
+        try {
+            const response = await fetch("https://scrape.izisol.uz/api/scrape/download", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Accept": "application/json"
+                },
+                body: JSON.stringify({ file: fileName })
             });
 
-            // Upload button click
-            uploadBtn.addEventListener('click', (e) => {
-                if (!selectedFile) {
-                    e.preventDefault();
-                    fileInput.classList.add('is-invalid');
-                    fileInput.nextElementSibling.textContent = 'Iltimos, fayl tanlang';
-                    return;
-                }
-                simulateUpload();
-            });
+            if (!response.ok) throw new Error("Server xatosi yoki fayl topilmadi");
 
-            // Simulate file upload with progress
-            function simulateUpload() {
-                uploadBtn.disabled = true;
-                btnText.textContent = 'Yuklanmoqda...';
-                progressContainer.classList.remove('hidden');
+            // Blob (binary data) olish
+            const blob = await response.blob();
 
-                let progress = 0;
-                const interval = setInterval(() => {
-                    progress += Math.random() * 15;
-                    if (progress > 100) progress = 100;
-                    progressBar.style.width = progress + '%';
-                    progressPercent.textContent = Math.round(progress) + '%';
-                    if (progress >= 100) {
-                        clearInterval(interval);
-                        setTimeout(() => {
-                            progressContainer.classList.add('hidden');
-                            successMessage.classList.remove('hidden');
-                            btnText.textContent = 'Yuklash Yakunlandi!';
-                            document.getElementById('uploadForm').submit();
-                            setTimeout(() => {
-                                uploadBtn.disabled = false;
-                                btnText.textContent = 'Yana fayl yuklash';
-                                successMessage.classList.add('hidden');
-                            }, 3000);
-                        }, 500);
-                    }
-                }, 100);
-            }
+            // Faylni avtomatik yuklab olish
+            const downloadUrl = window.URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = downloadUrl;
+            a.download = fileName; // nomini avtomatik qo‘yadi
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            window.URL.revokeObjectURL(downloadUrl);
 
-            // Format file size
-            function formatFileSize(bytes) {
-                if (bytes === 0) return '0 Bytes';
-                const k = 1024;
-                const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-                const i = Math.floor(Math.log(bytes) / Math.log(k));
-                return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-            }
+            status.textContent = "✅ Fayl muvaffaqiyatli yuklandi";
 
-            // Click to browse
-            uploadArea.addEventListener('click', () => {
-                fileInput.click();
-            });
-        });
-    </script>
+        } catch (error) {
+            console.error(error);
+            status.textContent = "❌ Yuklab olishda xatolik yuz berdi";
+        }
+    });
+});
+</script>
+
 </body>
 </html>

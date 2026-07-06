@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Log;
 use App\Models\TurkeyData;
+use App\Jobs\RunTurkeyScrapeJob;
 
 class TurkeyScraperController extends Controller
 {
@@ -50,190 +51,7 @@ class TurkeyScraperController extends Controller
         }
     }
 
-    public function scrape(Request $request)
-    {
-        set_time_limit(0);
-        Log::info('TurkeyScraperController: Scrape methodi boshlandi', [
-            'request_params' => $request->all()
-        ]);
-
-        try {
-            // Storage papkasini tekshirish
-            $storageDir = storage_path('app/public');
-            if (!is_dir($storageDir)) {
-                Log::error('TurkeyScraperController: Storage papkasi mavjud emas', ['path' => $storageDir]);
-                return redirect()->back()->with('error', 'Storage papkasi mavjud emas');
-            }
-
-            if (!is_writable($storageDir)) {
-                Log::error('TurkeyScraperController: Storage papkasiga yozish huquqi yo\'q', ['path' => $storageDir]);
-                return redirect()->back()->with('error', 'Storage papkasiga yozish huquqi yo\'q');
-            }
-
-            Log::info('TurkeyScraperController: Storage papkasi tekshirildi - OK');
-
-            // Artisan command chaqirish
-            Log::info('TurkeyScraperController: Artisan command chaqirilmoqda', ['command' => 'scrape']);
-            $exitCode = Artisan::call('scrape');
-            $artisanOutput = Artisan::output();
-            Log::info('TurkeyScraperController: Artisan command tugadi', [
-                'exit_code' => $exitCode,
-                'output' => $artisanOutput
-            ]);
-
-            // Agar command muvaffaqiyatsiz tugagan bo'lsa
-            if ($exitCode !== 0) {
-                Log::error('TurkeyScraperController: Artisan command xato bilan tugadi', [
-                    'exit_code' => $exitCode,
-                    'output' => $artisanOutput
-                ]);
-                return redirect()->back()->with('error', 'Scraping jarayonida xato yuz berdi. Selenium server ishlamasligini tekshiring.');
-            }
-
-            // Cache dan fayl yo'lini olish
-            $cachedFilePath = cache('excel_file_path');
-            if (!$cachedFilePath || !file_exists($cachedFilePath)) {
-                // Agar cache da yo'q bo'lsa, oxirgi yaratilgan faylni topishga harakat qilamiz
-                $files = glob(storage_path('app/public/turkiya-gruziya-*.xlsx'));
-                if (!empty($files)) {
-                    // Eng oxirgisini olish (vaqt bo'yicha)
-                    usort($files, function($a, $b) {
-                        return filemtime($b) - filemtime($a);
-                    });
-                    $cachedFilePath = $files[0];
-                    Log::info('TurkeyScraperController: Fayl glob orqali topildi', ['file_path' => $cachedFilePath]);
-                } else {
-                    Log::error('TurkeyScraperController: Hech qanday Excel fayl topilmadi');
-                    return redirect()->back()->with('error', 'Excel fayli yaratilmadi yoki topilmadi.');
-                }
-            }
-
-            // Fayl mavjudligini tekshirish
-            if (!file_exists($cachedFilePath)) {
-                Log::error('TurkeyScraperController: Fayl mavjud emas', ['file_path' => $cachedFilePath]);
-                $files = scandir($storageDir);
-                Log::info('TurkeyScraperController: Storage dagi barcha fayllar', ['files' => $files]);
-                return redirect()->back()->with('error', 'Excel fayli topilmadi.');
-            }
-
-            $fileSize = filesize($cachedFilePath);
-            Log::info('TurkeyScraperController: Fayl topildi', [
-                'file_path' => $cachedFilePath,
-                'file_size' => $fileSize,
-                'file_size_mb' => round($fileSize / 1024 / 1024, 2)
-            ]);
-
-            // Fayl hajmini tekshirish (faqat sarlavhalar bor yoki yo'q)
-            if ($fileSize <= 6232) {
-                Log::warning('TurkeyScraperController: Fayl bo\'sh yoki faqat minimal ma\'lumot mavjud.', [
-                    'file_path' => $cachedFilePath,
-                    'file_size' => $fileSize
-                ]);
-                return redirect()->back()->with('warning', 'Excel faylida faqat sarlavhalar mavjud. Ma\'lumotlar topilmadi yoki barcha sahifalar o\'qilmadi.');
-            }
-
-            // Fayl nomini olish (path dan)
-            $fileName = basename($cachedFilePath);
-            
-            Log::info('TurkeyScraperController: Fayl download uchun tayyorlanmoqda', [
-                'file_name' => $fileName,
-                'file_path' => $cachedFilePath
-            ]);
-
-            // Cache dan fayl yo'lini o'chirish (bir martalik ishlatish uchun)
-            cache()->forget('excel_file_path');
-
-            // Download response qaytarish
-            return response()->download($cachedFilePath, $fileName, [
-                'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                'Content-Disposition' => 'attachment; filename="' . $fileName . '"',
-                'Cache-Control' => 'no-cache, no-store, must-revalidate',
-                'Pragma' => 'no-cache',
-                'Expires' => '0'
-            ])->deleteFileAfterSend(true); // Faylni download dan keyin o'chirish
-
-        } catch (\Exception $e) {
-            Log::error('TurkeyScraperController: Umumiy xatolik', [
-                'message' => $e->getMessage(),
-                'file' => $e->getFile(),
-                'line' => $e->getLine(),
-                'trace' => $e->getTraceAsString()
-            ]);
-            return redirect()->back()->with('error', 'Xatolik yuz berdi: ' . $e->getMessage());
-        }
-    }
-
-    /**
-     * Ajax orqali scraping holati tekshirish uchun
-     */
-    public function checkScrapingStatus()
-    {
-        try {
-            // Oxirgi yaratilgan fayl mavjudligini tekshirish
-            $files = glob(storage_path('app/public/turkiya-gruziya-*.xlsx'));
-            
-            if (!empty($files)) {
-                // Eng oxirgisini topish
-                usort($files, function($a, $b) {
-                    return filemtime($b) - filemtime($a);
-                });
-                
-                $latestFile = $files[0];
-                $fileName = basename($latestFile);
-                $fileSize = filesize($latestFile);
-                $fileTime = filemtime($latestFile);
-                
-                return response()->json([
-                    'status' => 'completed',
-                    'file_exists' => true,
-                    'file_name' => $fileName,
-                    'file_size' => $fileSize,
-                    'file_time' => date('Y-m-d H:i:s', $fileTime),
-                    'download_url' => route('turkey.download', ['file' => $fileName])
-                ]);
-            }
-            
-            return response()->json([
-                'status' => 'processing',
-                'file_exists' => false
-            ]);
-            
-        } catch (\Exception $e) {
-            return response()->json([
-                'status' => 'error',
-                'message' => $e->getMessage()
-            ], 500);
-        }
-    }
-
-    /**
-     * To'g'ridan-to'g'ri fayl download qilish
-     */
-    public function downloadFile($fileName)
-    {
-        try {
-            $filePath = storage_path('app/public/' . $fileName);
-            
-            if (!file_exists($filePath)) {
-                Log::error('TurkeyScraperController: Download uchun fayl topilmadi', ['file_path' => $filePath]);
-                return redirect()->back()->with('error', 'Fayl topilmadi.');
-            }
-
-            Log::info('TurkeyScraperController: Fayl download qilinmoqda', ['file_name' => $fileName]);
-
-            return response()->download($filePath, $fileName, [
-                'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            ]);
-
-        } catch (\Exception $e) {
-            Log::error('TurkeyScraperController: Download xatoligi', [
-                'message' => $e->getMessage(),
-                'file_name' => $fileName
-            ]);
-            return redirect()->back()->with('error', 'Fayl download qilishda xato: ' . $e->getMessage());
-        }
-    }
-
+    
     /**
      * ID bo'yicha ma'lumotlarni modal uchun olish
      */
@@ -290,5 +108,40 @@ class TurkeyScraperController extends Controller
                 'message' => 'Ma\'lumot topilmadi yoki xatolik yuz berdi'
             ], 404);
         }
+    }
+
+    public function downloadFile(string $file)
+    {
+        $file = basename($file); // 🔒 XAVFSIZLIK
+        $path = storage_path('app/' . $file);
+
+        \Log::info('DOWNLOAD TRY', [
+            'file' => $file,
+            'path' => $path,
+            'exists' => file_exists($path)
+        ]);
+
+        if (!file_exists($path)) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'Fayl topilmadi',
+                'path'    => $path
+            ], 404);
+        }
+
+        return response()->download($path, $file, [
+            'Content-Type' =>
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        ]);
+    }
+
+    public function show($id)
+    {
+        $data = TurkeyData::findOrFail($id);
+
+        return response()->json([
+            'success' => true,
+            'data' => $data,
+        ]);
     }
 }
