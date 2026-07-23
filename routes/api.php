@@ -2,6 +2,7 @@
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\TelegramBotController;
 use App\Http\Controllers\API\ExampleController;
 use App\Http\Controllers\API\MintransController;
 use App\Http\Controllers\API\ScrapeController;
@@ -21,6 +22,7 @@ Route::get('/user', function (Request $request) {
 })->middleware('auth:sanctum');
 
 
+Route::post('/telegram/webhook', [TelegramBotController::class, 'webhook']);
 
 Route::get('/test', function () {
     return 'API OK';

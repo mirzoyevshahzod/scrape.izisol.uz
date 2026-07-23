@@ -6,7 +6,6 @@ use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Http;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
-use Symfony\Component\DomCrawler\Crawler;
 use PhpOffice\PhpSpreadsheet\Cell\DataType;
 use App\Models\Auto;
 
@@ -18,21 +17,19 @@ class ScrapeDeclarantData extends Command
         'Scrape Belarus queue and export Uzbek cars';
 
     private array $zones = [
+        'benyakoni' => [
+            'checkpoint_id' => '53d94097-2b34-11ec-8467-ac1f6bf889c0',
+            'name' => 'Бенякони',
+        ],
 
-        'benyakoni' =>
-            'https://mon.declarant.by/zone/benyakoni',
-
-        'brest-bts' =>
-            'https://mon.declarant.by/zone/brest-bts',
-
-        'grigorovschina' =>
-            'https://mon.declarant.by/zone/grigorovschina',
-
-        'kamennii-log' =>
-            'https://mon.declarant.by/zone/kamennii-log',
-
-        'kozlovichi' =>
-            'https://mon.declarant.by/zone/kozlovichi',
+        'kamennii-log' => [
+            'checkpoint_id' => 'b60677d4-8a00-4f93-a781-e129e1692a03',
+            'name' => 'Каменный Лог',
+        ],
+        'kozlovichi' => [
+            'checkpoint_id' => '98b5be92-d3a5-4ba2-9106-76eb4eb3df49',
+            'name' => 'Козловичи',
+        ],
     ];
 
     private array $uzbekPatterns = [
@@ -45,36 +42,30 @@ class ScrapeDeclarantData extends Command
     {
         $zone = $this->argument('zone');
 
-        if (!isset($this->zones[$zone])) {
-
+        if (! isset($this->zones[$zone])) {
             $this->error('Invalid zone');
-
             return;
         }
 
-        $url = $this->zones[$zone];
+        $checkpointId = $this->zones[$zone]['checkpoint_id'];
 
-        $this->info("Opening: {$url}");
+        $response = Http::acceptJson()->get(
+            'https://belarusborder.by/info/monitoring-new',
+            [
+                'token' => 'test',
+                'checkpointId' => $checkpointId,
+            ]
+        );
 
-        $response = Http::withHeaders([
-            'User-Agent' => 'Mozilla/5.0',
-        ])->get($url);
-
-        if (!$response->successful()) {
-
-            $this->error('Website not opened');
-
+        if (! $response->successful()) {
+            $this->error('API request failed');
             return;
         }
 
-        $html = $response->body();
-
-        $crawler = new Crawler($html);
+        $data = $response->json();
 
         $spreadsheet = new Spreadsheet();
-
-        $sheet =
-            $spreadsheet->getActiveSheet();
+        $sheet = $spreadsheet->getActiveSheet();
 
         $headers = [
             'Порядок вызова',
@@ -84,81 +75,53 @@ class ScrapeDeclarantData extends Command
             'Статус изменен',
             'Статус',
             'Company Name',
-            'Phones',
-            'States',
-            'Border'
+            'Phone',
+            'State',
+            'Border',
         ];
 
-        $columns =
-            ['A','B','C','D','E','F','G','H', 'I', 'J'];
+        $columns = ['A','B','C','D','E','F','G','H','I','J'];
 
         foreach ($headers as $i => $header) {
-
-            $sheet->setCellValue(
-                $columns[$i] . '1',
-                $header
-            );
+            $sheet->setCellValue($columns[$i] . '1', $header);
         }
+
+        $statuses = [
+            1 => 'В очереди',
+            2 => 'Прибыл в ЗО',
+            3 => 'Вызван в ПП',
+        ];
+
+        $queueTypes = [
+            1 => 'Приоритет',
+            2 => 'Электронная очередь',
+            3 => 'Живая очередь',
+        ];
 
         $rowIndex = 2;
 
-        $crawler
-        ->filter('tbody tr')
-        ->each(function ($tr)
-        use ($sheet, &$rowIndex, $zone) {
-
-            $tds = $tr->filter('td');
-
-            if ($tds->count() < 6) {
-                return;
-            }
-
-            $queueType =
-                trim($tds->eq(1)->text());
+        foreach ($data['truckLiveQueue'] ?? [] as $item) {
 
             $regnum = strtoupper(
-                preg_replace(
-                    '/[^A-Z0-9]/',
-                    '',
-                    $tds->eq(2)->text()
-                )
+                preg_replace('/[^A-Z0-9]/', '', $item['regnum'])
             );
 
-            if (
-                !$this->isUzbekVehicle($regnum)
-            ) {
-                return;
+            $this->info("Processing: {$regnum}");
+
+            if (! $this->isUzbekVehicle($regnum)) {
+                continue;
             }
 
-            $registrationDate =
-                trim($tds->eq(3)->text());
-
-            $changedDate =
-                trim($tds->eq(4)->text());
-
-            $status =
-                trim($tds->eq(5)->text());
-
-            $auto =
-                Auto::where(
-                    'state_number',
-                    $regnum
-                )->first();
-
-            $company =
-                $auto->company_name ?? '';
-
-            $phone =
-                $auto->phone ?? '';
+            $auto = Auto::where('state_number', $regnum)->first();
 
             $sheet->setCellValue(
                 "A{$rowIndex}",
-                trim($tds->eq(0)->text())
+                $item['order_id'] ?? '-'
             );
 
             $sheet->setCellValue(
                 "B{$rowIndex}",
-                $queueType
+                $queueTypes[$item['type_queue']] ?? $item['type_queue']
             );
 
             $sheet->setCellValue(
@@ -168,27 +131,27 @@ class ScrapeDeclarantData extends Command
 
             $sheet->setCellValue(
                 "D{$rowIndex}",
-                $registrationDate
+                $item['registration_date']
             );
 
             $sheet->setCellValue(
                 "E{$rowIndex}",
-                $changedDate
+                $item['changed_date']
             );
 
             $sheet->setCellValue(
                 "F{$rowIndex}",
-                $status
+                $statuses[$item['status']] ?? $item['status']
             );
 
             $sheet->setCellValue(
                 "G{$rowIndex}",
-                $company
+                $auto->company_name ?? ''
             );
 
             $sheet->setCellValueExplicit(
-                "G{$rowIndex}",
-                (string) $phone,
+                "H{$rowIndex}",
+                (string)($auto->phone ?? ''),
                 DataType::TYPE_STRING
             );
 
@@ -196,36 +159,22 @@ class ScrapeDeclarantData extends Command
                 "I{$rowIndex}",
                 'Беларусь Литва'
             );
+
             $sheet->setCellValue(
-            "J{$rowIndex}",
-            match ($zone) {
-                'benyakoni'      => 'Бенякони',
-                'brest-bts'      => 'Брест-БТС',
-                'grigorovschina' => 'Григорьевщина',
-                'kamennii-log'   => 'Каменный Лог',
-                'kozlovichi'     => 'Козловичи',
-                default          => $zone,
-            }
-        );
-            $rowIndex++;
-        });
-
-        $fileName =
-            $zone . '-' .
-            now()->format('Y-m-d-H-i-s') .
-            '.xlsx';
-
-        $path =
-            storage_path(
-                "app/declarant/{$fileName}"
+                "J{$rowIndex}",
+                $this->zones[$zone]['name']
             );
 
-        (new Xlsx($spreadsheet))
-            ->save($path);
+            $rowIndex++;
+        }
 
-        $this->info(
-            "Excel saved: {$path}"
-        );
+        $fileName = $zone . '-' . now()->format('Y-m-d-H-i-s') . '.xlsx';
+
+        $path = storage_path("app/declarant/{$fileName}");
+
+        (new Xlsx($spreadsheet))->save($path);
+
+        $this->info("Excel saved: {$path}");
     }
 
     private function isUzbekVehicle(string $reg): bool
