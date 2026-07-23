@@ -46,3 +46,7 @@ Route::get('/upload-zanjeer-file', [HomeController::class, 'uploadZanjeer'])->na
 Route::get('/e-ombor-converter', [HomeController::class, 'eOmborConverter'])->name('eOmborConverter');
 
 Route::get('/turkiya-converter', [HomeController::class, 'turkiyaConverter'])->name('turkiyaConverter');
+
+Route::get('/zitic-converter', [HomeController::class, 'ziticConverter'])->name('ziticConverter');
+
+Route::get('/declarant-converter', [HomeController::class, 'declarantConverter'])->name('declarantConverter');

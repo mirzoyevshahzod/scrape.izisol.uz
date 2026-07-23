@@ -54,6 +54,7 @@ Route::get('/docs/checkpoint', [ScrapeController::class, 'checkpointDocsDocx']);
 Route::post('/scrape/{zone}',[ScrapeController::class, 'scrape']);
 Route::get('/scrape/files', [ScrapeController::class, 'files']);
 Route::get('/scrape/download', [ScrapeController::class, 'download']);
+Route::post('/declarant/convert', [ScrapeController::class, 'convert']);
 Route::get('/scrape/download/{file}', [ScrapeController::class, 'downloadFile']);
 
 Route::post('/turkey/scrape', [TurkeyController::class, 'scrape'])->name('turkey.scrape');
@@ -72,6 +73,7 @@ Route::get('/qozoq/import/download/{file}', [QozoqController::class, 'downloadIm
 Route::post('/scrape-zitic', [ZiticController::class, 'scrape']);
 Route::get('/zitic/files', [ZiticController::class, 'listFiles']);
 Route::get('/zitic/download/{file}', [ZiticController::class, 'download']);
+Route::post('/zitic/convert', [ZiticController::class, 'convert']);
 
 Route::post('/orginfo/fill-inn', [OrginfoController::class, 'fillInn']);
 Route::get('/orginfo/check/{file}',[OrginfoController::class, 'checkFile']);

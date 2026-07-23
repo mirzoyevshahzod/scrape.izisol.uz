@@ -4,6 +4,8 @@ namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 
 class ZiticController extends Controller
 {
@@ -33,6 +35,35 @@ class ZiticController extends Controller
                 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
             ]
         );
+    }
+
+     public function convert(Request $request)
+    {
+        $request->validate([
+            'file' => 'required|string',
+        ]);
+
+        $inputPath = storage_path('app/zitic/' . $request->file);
+
+        if (!file_exists($inputPath)) {
+            return response()->json([
+                'message' => 'File topilmadi'
+            ], 404);
+        }
+
+        // Tanlangan fayl nomi
+        $downloadName = basename($request->file);
+
+        $outputPath = storage_path('app/zitic/' . $downloadName);
+
+        Artisan::call('zitic:convert', [
+            'input'  => $inputPath,
+            'output' => $outputPath,
+        ]);
+
+        return response()
+            ->download($outputPath, $downloadName)
+            ->deleteFileAfterSend(true);
     }
 
     public function listFiles()

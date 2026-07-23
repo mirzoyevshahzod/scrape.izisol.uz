@@ -56,6 +56,36 @@ class ScrapeController extends Controller
             ]
         );
     }
+
+      public function convert(Request $request)
+    {
+        $request->validate([
+            'excel_file' => 'required|file|mimes:xlsx,xls,csv',
+        ]);
+
+        $uploadedFile = $request->file('excel_file');
+
+        $inputPath = $uploadedFile->getRealPath();
+
+        // Foydalanuvchi yuklagan fayl nomi
+        $originalName = pathinfo(
+            $uploadedFile->getClientOriginalName(),
+            PATHINFO_FILENAME
+        );
+
+        $downloadName = $originalName . '-converted.xlsx';
+
+        $outputPath = storage_path('app/' . $downloadName);
+
+        Artisan::call('declarant:convert', [
+            'input'  => $inputPath,
+            'output' => $outputPath,
+        ]);
+
+        return response()->download($outputPath, $downloadName)
+            ->deleteFileAfterSend(true);
+    }
+
     public function files()
     {
         $files = glob(

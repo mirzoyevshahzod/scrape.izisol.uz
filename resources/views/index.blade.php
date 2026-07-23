@@ -165,6 +165,14 @@
                             <i class="fas fa-download me-2"></i>
                             Turkiya Converter
                         </a>
+                        <a class="nav-link" href="{{ route('ziticConverter') }}" target="_blank" id="nav-page7">
+                            <i class="fas fa-download me-2"></i>
+                            Zitic Converter
+                        </a>
+                        <a class="nav-link" href="{{ route('declarantConverter') }}" target="_blank" id="nav-page7">
+                            <i class="fas fa-download me-2"></i>
+                            Declarant Converter
+                        </a>
                     </nav>
                 </div>
             </div>

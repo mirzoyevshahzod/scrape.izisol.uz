@@ -65,6 +65,16 @@ class HomeController extends Controller
         return view('turkiya-converter');
     }
 
+    public function ziticConverter()
+    {
+        return view('zitic-converter');
+    }
+
+    public function declarantConverter()
+    {
+        return view('declarant-converter');
+    }
+
     public function autos()
     {
         return view('autos');
