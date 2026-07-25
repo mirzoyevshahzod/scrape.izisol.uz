@@ -173,6 +173,10 @@
                             <i class="fas fa-download me-2"></i>
                             Declarant Converter
                         </a>
+                        <a class="nav-link" href="{{ route('filterUzbekCarNumber') }}" target="_blank" id="nav-page7">
+                            <i class="fas fa-download me-2"></i>
+                            Uzbek Car Number Filter
+                        </a>
                     </nav>
                 </div>
             </div>

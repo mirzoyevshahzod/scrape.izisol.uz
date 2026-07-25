@@ -75,6 +75,11 @@ class HomeController extends Controller
         return view('declarant-converter');
     }
 
+    public function filterUzbekCarNumber()
+    {
+        return view('search-uzbek-plates');
+    }
+
     public function autos()
     {
         return view('autos');

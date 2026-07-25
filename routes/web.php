@@ -50,3 +50,5 @@ Route::get('/turkiya-converter', [HomeController::class, 'turkiyaConverter'])->n
 Route::get('/zitic-converter', [HomeController::class, 'ziticConverter'])->name('ziticConverter');
 
 Route::get('/declarant-converter', [HomeController::class, 'declarantConverter'])->name('declarantConverter');
+
+Route::get('/filter-uzbek-car-number', [HomeController::class, 'filterUzbekCarNumber'])->name('filterUzbekCarNumber');

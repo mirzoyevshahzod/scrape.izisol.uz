@@ -16,6 +16,7 @@ use App\Http\Controllers\API\OrginfoController;
 use App\Http\Controllers\API\ZanjeerUploadFilesController;
 use App\Http\Controllers\API\ConvertEomborFilesController;
 use App\Http\Controllers\API\ConvertTurkiyaFilesController;
+use App\Http\Controllers\API\SearchUzbekCarNumberController;
 
 Route::get('/user', function (Request $request) {
     return $request->user();
@@ -97,5 +98,7 @@ Route::post('/zanjeer-upload-files', [ZanjeerUploadFilesController::class, 'down
 Route::post('/convert-e-ombor-excel', [ConvertEomborFilesController::class, 'convert']);
 
 Route::post('/border-convert', [ConvertTurkiyaFilesController::class, 'convert']);
+
+Route::post('/filter-uz-plates', [SearchUzbekCarNumberController::class, 'filterUzPlates']);
 
 Route::get('/test', [TestController::class, 'index']);
