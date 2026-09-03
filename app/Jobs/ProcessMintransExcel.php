@@ -44,11 +44,5 @@ class ProcessMintransExcel implements ShouldQueue
         } catch (\Throwable $e) {
             Log::error('ProcessMintransExcel: Xato yuz berdi: ' . $e->getMessage());
         }
-
-        // Faylni tozalash (xohlovga ko‘ra)
-        if (file_exists($this->filePath)) {
-            unlink($this->filePath);
-            Log::info('ProcessMintransExcel: Vaqtincha fayl o‘chirildi: ' . $this->filePath);
-        }
     }
 }

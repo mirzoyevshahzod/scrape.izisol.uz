@@ -2,6 +2,7 @@
 <html lang="uz">
 <head>
     <meta charset="UTF-8">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Turkiya Files</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -133,31 +134,18 @@
                                         <div class="card-body p-4">
                                             <form id="uploadForm" enctype="multipart/form-data">
                                                 @csrf
-                                                <div class="upload-area" id="uploadArea">
-                                                    <div class="mb-4">
-                                                        <i class="fas fa-upload" style="font-size: 2rem; color: #667eea;"></i>
-                                                        <h3 class="text-lg font-semibold text-gray-800 mt-2">Excel faylni bu yerga tashlang</h3>
-                                                        <p class="text-gray-600">yoki tanlash uchun bosing</p>
-                                                        <div class="text-sm text-gray-500 mt-2">
-                                                            Qo'llab-quvvatlanadigan formatlar: .xlsx, .xls, .csv
-                                                        </div>
-                                                        <input type="file" id="fileInput" name="excel_file" accept=".xlsx,.xls,.csv" class="d-none">
-                                                    </div>
+                                                 <div class="mb-4">
+                                                <label for="region" class="form-label fw-bold">
+                                                    <i class="fas fa-globe me-2 text-primary"></i>Yuklab olish uchun fayl tanlang:
+                                                </label>
+                                                <select name="region" id="region" class="form-select form-select-lg" required>
+                                                    <option value="">-- Fayllar --</option>
+                                                </select>
+                                                <div class="form-text">
+                                                    <i class="fas fa-info-circle me-1"></i>
+                                                    Yuklab olish uchun fayl tanlang
                                                 </div>
-
-                                                <div id="fileInfo" class="mt-4 p-4 bg-gray-100 rounded-lg hidden">
-                                                    <div class="d-flex align-items-center justify-content-between">
-                                                        <div class="d-flex align-items-center gap-3">
-                                                            <div class="w-10 h-10 bg-green-500 rounded-lg d-flex align-items-center justify-content-center">
-                                                                <i class="fas fa-check text-white"></i>
-                                                            </div>
-                                                            <div>
-                                                                <p id="fileName" class="text-gray-800 font-medium"></p>
-                                                                <p id="fileSize" class="text-gray-600 text-sm"></p>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </div>
+                                            </div>
 
                                                 <div class="d-grid gap-2 mt-4">
                                                     <button id="uploadBtn" type="submit" class="btn btn-primary btn-lg py-3" disabled>
@@ -181,56 +169,57 @@
         </div>
     </div>
 <script>
-const uploadArea = document.getElementById('uploadArea');
-const fileInput = document.getElementById('fileInput');
+
+
+const select = document.getElementById('region');
 const uploadBtn = document.getElementById('uploadBtn');
 const btnText = document.getElementById('btnText');
-
-const fileInfo = document.getElementById('fileInfo');
-const fileName = document.getElementById('fileName');
-const fileSize = document.getElementById('fileSize');
-
-uploadArea.addEventListener('click', () => fileInput.click());
-
-fileInput.addEventListener('change', () => {
-
-    if (!fileInput.files.length) return;
-
-    const file = fileInput.files[0];
-
-    fileInfo.classList.remove('hidden');
-
-    fileName.innerText = file.name;
-    fileSize.innerText = (file.size / 1024 / 1024).toFixed(2) + ' MB';
-
-    uploadBtn.disabled = false;
-    btnText.innerText = 'Convert qilish';
-});
 
 document.getElementById('uploadForm').addEventListener('submit', async function (e) {
 
     e.preventDefault();
 
-    if (!fileInput.files.length) {
-        Swal.fire('Xatolik', 'Excel fayl tanlang.', 'error');
+    const selectedFile = select.value;
+
+    if (!selectedFile) {
+        Swal.fire('Xatolik', 'Avval fayl tanlang.', 'error');
         return;
     }
 
+    console.log('Backendga yuborilmoqda:', selectedFile);
+
     uploadBtn.disabled = true;
     btnText.innerHTML = 'Yuklanmoqda...';
-
-    const formData = new FormData();
-    formData.append('excel_file', fileInput.files[0]);
 
     try {
 
         const response = await fetch('/api/border-convert', {
             method: 'POST',
-            body: formData
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
+            },
+            body: JSON.stringify({
+                file: selectedFile
+            })
         });
 
+        console.log('Status:', response.status);
+
         if (!response.ok) {
-            throw new Error('Server xatosi');
+            throw new Error('Server xatosi: ' + response.status);
+        }
+
+        const disposition = response.headers.get('Content-Disposition');
+
+        let filename = 'converted.xlsx';
+
+        if (disposition) {
+            const match = disposition.match(/filename="?([^"]+)"?/);
+
+            if (match) {
+                filename = match[1];
+            }
         }
 
         const blob = await response.blob();
@@ -238,18 +227,10 @@ document.getElementById('uploadForm').addEventListener('submit', async function 
         const url = window.URL.createObjectURL(blob);
 
         const a = document.createElement('a');
+
         a.href = url;
-        const disposition = response.headers.get('Content-Disposition');
-
-        let filename = 'converted.xlsx';
-
-        if (disposition && disposition.includes('filename=')) {
-            filename = disposition
-                .split('filename=')[1]
-                .replace(/"/g, '');
-        }
-
         a.download = filename;
+
         document.body.appendChild(a);
         a.click();
         a.remove();
@@ -263,6 +244,8 @@ document.getElementById('uploadForm').addEventListener('submit', async function 
         });
 
     } catch (e) {
+
+        console.error(e);
 
         Swal.fire({
             icon: 'error',
@@ -278,6 +261,54 @@ document.getElementById('uploadForm').addEventListener('submit', async function 
     }
 
 });
+
+select.addEventListener('change', () => {
+
+    if (select.value) {
+        uploadBtn.disabled = false;
+        btnText.innerText = 'Convert qilish';
+    } else {
+        uploadBtn.disabled = true;
+        btnText.innerText = 'Avval fayl tanlang';
+    }
+
+});
+document.addEventListener('DOMContentLoaded', async () => 
+{
+
+    try {
+
+        const response =
+            await fetch('/api/turkey/files');
+
+        const data =
+            await response.json();
+            console.log(data);
+
+      
+
+        if (data.status && data.files.length) {
+
+
+            data.files.forEach(file => {
+                const option = document.createElement('option');
+
+                option.value = file;
+                option.textContent = file;
+
+                select.appendChild(option);
+            });
+        }
+
+    } catch (error) {
+
+        console.error(error);
+    }
+});
+
+
+
+
 </script>
 
 </body>

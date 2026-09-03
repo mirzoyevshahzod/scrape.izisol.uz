@@ -57,34 +57,76 @@ class ScrapeController extends Controller
         );
     }
 
-      public function convert(Request $request)
-    {
-        $request->validate([
-            'excel_file' => 'required|file|mimes:xlsx,xls,csv',
-        ]);
+     public function convert(Request $request)
+{
+    $request->validate([
+        'file' => 'required|string',
+    ]);
 
-        $uploadedFile = $request->file('excel_file');
+    $fileName = basename($request->input('file'));
 
-        $inputPath = $uploadedFile->getRealPath();
+    // Serverdagi original Declarant fayl
+    $inputPath = storage_path(
+        'app/declarant/' . $fileName
+    );
 
-        // Foydalanuvchi yuklagan fayl nomi
-        $originalName = pathinfo(
-            $uploadedFile->getClientOriginalName(),
-            PATHINFO_FILENAME
-        );
-
-        $downloadName = $originalName . '-converted.xlsx';
-
-        $outputPath = storage_path('app/' . $downloadName);
-
-        Artisan::call('declarant:convert', [
-            'input'  => $inputPath,
-            'output' => $outputPath,
-        ]);
-
-        return response()->download($outputPath, $downloadName)
-            ->deleteFileAfterSend(true);
+    // Fayl mavjudligini tekshirish
+    if (!file_exists($inputPath)) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Fayl topilmadi',
+            'file' => $fileName,
+            'path' => $inputPath,
+        ], 404);
     }
+
+    // Fayl nomi
+    $originalName = pathinfo(
+        $fileName,
+        PATHINFO_FILENAME
+    );
+
+    // Convert qilingan fayl nomi
+    $downloadName = $originalName . '-converted.xlsx';
+
+    // Output
+    $outputPath = storage_path(
+        'app/declarant/' . $downloadName
+    );
+
+    // Artisan command
+    Artisan::call('declarant:convert', [
+        'input' => $inputPath,
+        'output' => $outputPath,
+    ]);
+
+    // Command outputini logga yozib qo'yamiz
+    \Log::info('Declarant convert output:', [
+        'file' => $fileName,
+        'output' => Artisan::output(),
+    ]);
+
+    // Natija yaratilganmi?
+    if (!file_exists($outputPath)) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Converted fayl yaratilmadi',
+            'command_output' => Artisan::output(),
+        ], 500);
+    }
+
+    // Tayyor faylni yuklab berish
+    return response()
+        ->download(
+            $outputPath,
+            $downloadName,
+            [
+                'Content-Type' =>
+                    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            ]
+        )
+        ->deleteFileAfterSend(true);
+}
 
     public function files()
     {

@@ -21,7 +21,7 @@ class ConvertZiticExcelCommand extends Command
     /**
      * Execute the console command.
      */
-     public function handle()
+    public function handle()
     {
         $input = $this->argument('input');
 
@@ -47,9 +47,9 @@ class ConvertZiticExcelCommand extends Command
 
         foreach ($sheet->getRowIterator(2) as $row) {
 
-            $plate = trim((string)$sheet->getCell('A' . $row->getRowIndex())->getValue());
+            $plate = trim((string) $sheet->getCell('A' . $row->getRowIndex())->getValue());
 
-            $date = trim((string)$sheet->getCell('C' . $row->getRowIndex())->getFormattedValue());
+            $date = trim((string) $sheet->getCell('C' . $row->getRowIndex())->getFormattedValue());
 
             if ($plate == '') {
                 continue;

@@ -10,23 +10,21 @@ use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 class ConvertEomborFilesCommand extends Command
 {
     protected $signature = 'excel:convert-border
-                            {input : Input excel file}
-                            {output? : Output excel file}';
+                            {inputs* : Input excel files}
+                            {--output=converted.xlsx : Output excel file}';
 
-    protected $description = 'Convert border excel to customs format';
+    protected $description = 'Convert multiple border excel files to customs format';
 
     public function handle()
     {
-        $input = $this->argument('input');
-        $output = $this->argument('output') ?? 'converted.xlsx';
+        $inputs = $this->argument('inputs');
+        $output = $this->option('output');
 
-        if (!file_exists($input)) {
-            $this->error("File not found: {$input}");
+        if (empty($inputs)) {
+            $this->error('Excel fayllar ko\'rsatilmagan.');
+
             return Command::FAILURE;
         }
-
-        $spreadsheet = IOFactory::load($input);
-        $sheet = $spreadsheet->getActiveSheet();
 
         $newSpreadsheet = new Spreadsheet();
         $newSheet = $newSpreadsheet->getActiveSheet();
@@ -43,53 +41,155 @@ class ConvertEomborFilesCommand extends Command
 
         foreach ($headers as $index => $header) {
             $column = chr(65 + $index);
-            $newSheet->setCellValue($column . '1', $header);
+
+            $newSheet->setCellValue(
+                $column . '1',
+                $header
+            );
         }
 
         $newRow = 2;
 
-        $highestRow = $sheet->getHighestRow();
+        foreach ($inputs as $input) {
 
-        for ($row = 2; $row <= $highestRow; $row++) {
-
-            $inn = trim((string)$sheet->getCell("G{$row}")->getValue());
-
-            if ($inn == '') {
+            if (!file_exists($input)) {
+                $this->warn("File topilmadi: {$input}");
                 continue;
             }
 
-            $firstDigit = substr($inn, 0, 1);
+            $this->info("Processing: {$input}");
 
-            // faqat 2 va 3 bilan boshlangani qolsin
-            if (!in_array($firstDigit, ['2', '3'])) {
-                continue;
+            try {
+
+                $spreadsheet = IOFactory::load($input);
+                $sheet = $spreadsheet->getActiveSheet();
+
+                $highestRow = $sheet->getHighestRow();
+
+                for ($row = 2; $row <= $highestRow; $row++) {
+
+                    $inn = trim(
+                        (string) $sheet
+                            ->getCell("G{$row}")
+                            ->getValue()
+                    );
+
+                    if ($inn === '') {
+                        continue;
+                    }
+
+                    $firstDigit = substr($inn, 0, 1);
+
+                    if (!in_array($firstDigit, ['2', '3'])) {
+                        continue;
+                    }
+
+                    $customsDate = $sheet
+                        ->getCell("C{$row}")
+                        ->getFormattedValue();
+
+                    $transport = $sheet
+                        ->getCell("E{$row}")
+                        ->getValue();
+
+                    $weight = $sheet
+                        ->getCell("F{$row}")
+                        ->getValue();
+
+                    $recipient = $sheet
+                        ->getCell("H{$row}")
+                        ->getValue();
+
+                    $post = $sheet
+                        ->getCell("I{$row}")
+                        ->getValue();
+
+                    $newSheet->setCellValue(
+                        "A{$newRow}",
+                        $customsDate
+                    );
+
+                    $newSheet->setCellValue(
+                        "B{$newRow}",
+                        $transport
+                    );
+
+                    $newSheet->setCellValue(
+                        "C{$newRow}",
+                        $weight
+                    );
+
+                    $newSheet->setCellValue(
+                        "D{$newRow}",
+                        $inn
+                    );
+
+                    $newSheet->setCellValue(
+                        "E{$newRow}",
+                        $recipient
+                    );
+
+                    $newSheet->setCellValue(
+                        "F{$newRow}",
+                        ''
+                    );
+
+                    $newSheet->setCellValue(
+                        "G{$newRow}",
+                        $post
+                    );
+
+                    $newRow++;
+                }
+
+                /*
+                 * MUHIM:
+                 * Faylni xotiradan chiqaramiz
+                 */
+                $spreadsheet->disconnectWorksheets();
+                unset($spreadsheet);
+
+                gc_collect_cycles();
+
+            } catch (\Throwable $e) {
+
+                $this->error("Xatolik: {$input}");
+                $this->error($e->getMessage());
+
+                return Command::FAILURE;
             }
-
-            $customsDate = $sheet->getCell("C{$row}")->getFormattedValue();
-            $transport   = $sheet->getCell("E{$row}")->getValue();
-            $weight      = $sheet->getCell("F{$row}")->getValue();
-            $recipient   = $sheet->getCell("H{$row}")->getValue();
-            $post        = $sheet->getCell("I{$row}")->getValue();
-
-            $newSheet->setCellValue("A{$newRow}", $customsDate);
-            $newSheet->setCellValue("B{$newRow}", $transport);
-            $newSheet->setCellValue("C{$newRow}", $weight);
-            $newSheet->setCellValue("D{$newRow}", $inn);
-            $newSheet->setCellValue("E{$newRow}", $recipient);
-            $newSheet->setCellValue("F{$newRow}", '');
-            $newSheet->setCellValue("G{$newRow}", $post);
-
-            $newRow++;
         }
 
         foreach (range('A', 'G') as $column) {
-            $newSheet->getColumnDimension($column)->setAutoSize(true);
+            $newSheet
+                ->getColumnDimension($column)
+                ->setAutoSize(true);
         }
 
-        $writer = new Xlsx($newSpreadsheet);
-        $writer->save($output);
+        try {
 
-        $this->info("Done!");
+            $writer = new Xlsx($newSpreadsheet);
+
+            $writer->save($output);
+
+            $newSpreadsheet->disconnectWorksheets();
+            unset($newSpreadsheet);
+
+            gc_collect_cycles();
+
+        } catch (\Throwable $e) {
+
+            $this->error('Output Excel yaratishda xatolik:');
+            $this->error($e->getMessage());
+
+            return Command::FAILURE;
+        }
+
+        $totalRows = $newRow - 2;
+
+        $this->newLine();
+        $this->info('Done!');
+        $this->info("Jami {$totalRows} ta ma'lumot qo'shildi.");
         $this->info("Saved: {$output}");
 
         return Command::SUCCESS;

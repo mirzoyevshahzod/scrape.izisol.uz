@@ -32,12 +32,12 @@ class ZiticController extends Controller
             basename($path),
             [
                 'Content-Type' =>
-                'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
             ]
         );
     }
 
-     public function convert(Request $request)
+    public function convert(Request $request)
     {
         $request->validate([
             'file' => 'required|string',
@@ -51,54 +51,61 @@ class ZiticController extends Controller
             ], 404);
         }
 
-        // Tanlangan fayl nomi
-        $downloadName = basename($request->file);
+        $originalName = pathinfo($request->file, PATHINFO_FILENAME);
 
-        $outputPath = storage_path('app/zitic/' . $downloadName);
+        $outputName = $originalName . '_convert.xlsx';
+
+        $outputPath = storage_path('app/zitic/' . $outputName);
 
         Artisan::call('zitic:convert', [
-            'input'  => $inputPath,
+            'input' => $inputPath,
             'output' => $outputPath,
         ]);
 
+        if (!file_exists($outputPath)) {
+            return response()->json([
+                'message' => 'Convert fayl yaratilmadi'
+            ], 500);
+        }
+
         return response()
-            ->download($outputPath, $downloadName)
+            ->download($outputPath, $outputName)
             ->deleteFileAfterSend(true);
     }
 
     public function listFiles()
     {
         $files = glob(storage_path('app/zitic/zitic_*.xlsx'));
-         usort($files, function ($a, $b) {
+        usort($files, function ($a, $b) {
             return filemtime($b) - filemtime($a);
         });
 
 
         return response()->json([
             'status' => true,
-            'files'  => array_map('basename', $files)
+            'files' => array_map('basename', $files)
         ]);
     }
 
     public function download(string $file)
     {
         $path = storage_path('app/zitic/' . basename($file));
-    
-            if (!file_exists($path)) {
-                return response()->json([
-                    'status'  => false,
-                    'message' => 'Fayl topilmadi'
-                ], 404);
-            }
-    
-            return response()->download(
-                $path,
-                basename($file),
-                [
-                    'Content-Type' =>
+
+        if (!file_exists($path)) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Fayl topilmadi'
+            ], 404);
+        }
+
+        return response()->download(
+            $path,
+            basename($file),
+            [
+                'Content-Type' =>
                     'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                ]
-            );
+            ]
+        );
     }
 
 
