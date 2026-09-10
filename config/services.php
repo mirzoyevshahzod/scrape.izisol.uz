@@ -37,5 +37,9 @@ return [
 
     'telegram' => [
         'bot_token' => env('TELEGRAM_BOT_TOKEN'),
-    ]
+    ],
+
+    'checkpoint_scraper' => [
+        'api_key' => env('CHECKPOINT_SCRAPER_API_KEY'),
+    ],
 ];

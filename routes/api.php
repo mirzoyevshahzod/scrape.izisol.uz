@@ -17,6 +17,8 @@ use App\Http\Controllers\API\ZanjeerUploadFilesController;
 use App\Http\Controllers\API\ConvertEomborFilesController;
 use App\Http\Controllers\API\ConvertTurkiyaFilesController;
 use App\Http\Controllers\API\SearchUzbekCarNumberController;
+use App\Http\Controllers\CheckpointScraperController;
+
 
 Route::get('/user', function (Request $request) {
     return $request->user();
@@ -28,6 +30,8 @@ Route::post('/telegram/webhook', [TelegramBotController::class, 'webhook']);
 Route::get('/test', function () {
     return 'API OK';
 });
+
+Route::post('/checkpoints/scrape-all', [CheckpointScraperController::class, 'scrapeAll']);
 
 Route::get('/mintrans/all-files', [ExampleController::class, 'listIntegratedFiles']);
 Route::post('/mintrans/download', [ExampleController::class, 'FileDownload']);
