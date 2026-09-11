@@ -85,4 +85,9 @@ class HomeController extends Controller
         return view('autos');
     }
 
+    public function mergeExcelFiles()
+    {
+        return view('merge-excel-files');
+    }
+
 }

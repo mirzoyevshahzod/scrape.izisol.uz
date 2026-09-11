@@ -177,6 +177,10 @@
                             <i class="fas fa-download me-2"></i>
                             Uzbek Car Number Filter
                         </a>
+                        <a class="nav-link" href="{{ route('mergeExcelFiles') }}" target="_blank" id="nav-page7">
+                            <i class="fas fa-object-group me-2"></i>
+                            Excel Fayllarni Birlashtirish
+                        </a>
                     </nav>
                 </div>
             </div>

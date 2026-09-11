@@ -52,3 +52,5 @@ Route::get('/zitic-converter', [HomeController::class, 'ziticConverter'])->name(
 Route::get('/declarant-converter', [HomeController::class, 'declarantConverter'])->name('declarantConverter');
 
 Route::get('/filter-uzbek-car-number', [HomeController::class, 'filterUzbekCarNumber'])->name('filterUzbekCarNumber');
+
+Route::get('/merge-excel-files', [HomeController::class, 'mergeExcelFiles'])->name('mergeExcelFiles');

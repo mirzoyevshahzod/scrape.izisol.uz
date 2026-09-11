@@ -15,6 +15,7 @@ use App\Http\Controllers\API\TestController;
 use App\Http\Controllers\API\OrginfoController;
 use App\Http\Controllers\API\ZanjeerUploadFilesController;
 use App\Http\Controllers\API\ConvertEomborFilesController;
+use App\Http\Controllers\API\MergeExcelFilesController;
 use App\Http\Controllers\API\ConvertTurkiyaFilesController;
 use App\Http\Controllers\API\SearchUzbekCarNumberController;
 use App\Http\Controllers\CheckpointScraperController;
@@ -100,6 +101,8 @@ Route::get('/autos', [AutoController::class, 'index']);
 Route::post('/zanjeer-upload-files', [ZanjeerUploadFilesController::class, 'downloadBorderZip']);
 
 Route::post('/convert-e-ombor-excel', [ConvertEomborFilesController::class, 'convert']);
+
+Route::post('/merge-excel-files', [MergeExcelFilesController::class, 'merge']);
 
 Route::post('/border-convert', [ConvertTurkiyaFilesController::class, 'convert']);
 
