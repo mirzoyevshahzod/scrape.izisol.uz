@@ -36,3 +36,7 @@ Schedule::command('scrape:zitic-html')
 Schedule::command('scrape:html')
     ->dailyAt('08:00')
     ->withoutOverlapping();
+
+Schedule::command('qozoq:warehouse-pipeline')
+    ->dailyAt('09:00')
+    ->withoutOverlapping();

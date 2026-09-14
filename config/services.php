@@ -42,4 +42,10 @@ return [
     'checkpoint_scraper' => [
         'api_key' => env('CHECKPOINT_SCRAPER_API_KEY'),
     ],
+
+    'warehouse' => [
+        'base_url' => env('WAREHOUSE_BASE_URL', 'https://warehouse.izisol.uz'),
+        'email' => env('WAREHOUSE_EMAIL'),
+        'password' => env('WAREHOUSE_PASSWORD'),
+    ],
 ];
