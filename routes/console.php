@@ -25,18 +25,18 @@ $declarantZones = ['benyakoni', 'kamennii-log', 'kozlovichi'];
 
 foreach ($declarantZones as $zone) {
     Schedule::command('scrape:declarant-data', [$zone])
-        ->dailyAt('08:00')
+        ->dailyAt('07:00')
         ->withoutOverlapping();
 }
 
 Schedule::command('scrape:zitic-html')
-    ->dailyAt('08:00')
+    ->dailyAt('07:00')
     ->withoutOverlapping();
 
 Schedule::command('scrape:html')
-    ->dailyAt('08:00')
+    ->dailyAt('07:00')
     ->withoutOverlapping();
 
 Schedule::command('qozoq:warehouse-pipeline')
-    ->dailyAt('09:00')
+    ->dailyAt('08:00')
     ->withoutOverlapping();
