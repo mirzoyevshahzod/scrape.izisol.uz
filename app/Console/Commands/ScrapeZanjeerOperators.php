@@ -8,7 +8,9 @@ use GuzzleHttp\Cookie\CookieJar;
 use Symfony\Component\DomCrawler\Crawler;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Storage;
+use App\Models\CrmToken;
 
 class ScrapeZanjeerOperators extends Command
 {
@@ -35,20 +37,37 @@ class ScrapeZanjeerOperators extends Command
         }
 
         // =========================
-        // COOKIE
+        // COOKIE (crm_tokens jadvalidan, "php artisan crm:login" orqali yangilanadi)
         // =========================
+        $crmToken = CrmToken::where('name', 'zanjeer_crm')->first();
+
+        if (!$crmToken) {
+            $this->info('CRM tokenlar topilmadi, crm:login ishga tushirilmoqda...');
+
+            Artisan::call('crm:login');
+            $this->info(Artisan::output());
+
+            $crmToken = CrmToken::where('name', 'zanjeer_crm')->first();
+        }
+
+        if (!$crmToken || !$crmToken->xsrf_token || !$crmToken->session_cookie) {
+            $this->error('CRM tokenlarni olib bo\'lmadi. "php artisan crm:login" ni qo\'lda ishga tushirib tekshiring.');
+
+            return Command::FAILURE;
+        }
+
         $cookieJar = CookieJar::fromArray([
 
-            'XSRF-TOKEN' => 'eyJpdiI6IlN5azF2ZGVhTmZ0ZEg3ZlhCVDV4Rnc9PSIsInZhbHVlIjoiK0pwMHRSR0lENlpUcUIyRmZ4cURTN1IxTkl5WXBGeSthaWIzd0w0eFhlT1VIU1ZYd0U3ZHYyVXQxTVZibjJLalZLdzJZam5KMWFaRGJPem1hQXdvQnN0V1ZHaG9heVZTNkFZakZZK0FnUElwZ3NuYUF3dE1LYU1sWmVicVViOHgiLCJtYWMiOiI2ODE0NmVhNmM5ZmI1NjdhMWQwNWM0M2RjYmE1MzI4ZmNiZWM2NWQzNjYyYmVlZTZmNmFhYWVlYzY5YWViZTQyIiwidGFnIjoiIn0%3D',
+            'XSRF-TOKEN' => $crmToken->xsrf_token,
 
-            'zanjeer_crm_session' => 'eyJpdiI6IlpYL3BBbTVpdDg0YWh4Nk1McnVlM0E9PSIsInZhbHVlIjoiaWh1SWRyQVZUWFk4NkQ4WDRpOXcvQkRiRHhMM3VxdnVNM01KdXdsZHJrMDJDT1NvZG52aDBlQ2ZkdlFRM0RPK25zeFJyNTROSnBEcGZucHlxcjc1R2N2MWg5c2dWNHRFTDVNK3Q3L1l0dGtmZFIzQ040SzJiekRzV2laQUNPWkQiLCJtYWMiOiIxZjhjMWY1NmQzZmFhOTk1ODdjMjBiZWJiZDEwNjkwNDZlM2IwNDYzMDQyOTRmMTk1OGU5MmFjZDI4MThkNGE0IiwidGFnIjoiIn0%3D'
+            $crmToken->session_cookie_name => $crmToken->session_cookie,
 
         ], 'crm.zanjeer.uz');
 
         // =========================
         // CLIENT
         // =========================
-        $client = new Client([
+        $buildClient = fn (CookieJar $cookieJar) => new Client([
 
             'verify' => false,
 
@@ -61,6 +80,8 @@ class ScrapeZanjeerOperators extends Command
                 'User-Agent' => 'Mozilla/5.0',
             ]
         ]);
+
+        $client = $buildClient($cookieJar);
 
         try {
 
@@ -85,6 +106,37 @@ class ScrapeZanjeerOperators extends Command
             );
 
             $csrfToken = $csrfMatch[1] ?? null;
+
+            // Sessiya muddati tugagan bo'lishi mumkin — bir marta qayta login
+            // qilib, yangi tokenlar bilan qayta urinib ko'ramiz.
+            if (!$csrfToken) {
+
+                $this->warn('CSRF token topilmadi, sessiya eskirgan bo\'lishi mumkin. crm:login qayta ishga tushirilmoqda...');
+
+                Artisan::call('crm:login', ['--fresh' => true]);
+                $this->info(Artisan::output());
+
+                $crmToken = CrmToken::where('name', 'zanjeer_crm')->first();
+
+                if (!$crmToken || !$crmToken->xsrf_token || !$crmToken->session_cookie) {
+                    $this->error('CRM tokenlarni qayta olib bo\'lmadi.');
+
+                    return Command::FAILURE;
+                }
+
+                $cookieJar = CookieJar::fromArray([
+                    'XSRF-TOKEN' => $crmToken->xsrf_token,
+                    $crmToken->session_cookie_name => $crmToken->session_cookie,
+                ], 'crm.zanjeer.uz');
+
+                $client = $buildClient($cookieJar);
+
+                $pageResponse = $client->get('https://crm.zanjeer.uz/users/contragents');
+                $html = $pageResponse->getBody()->getContents();
+
+                preg_match('/<meta name="csrf-token" content="([^"]+)"/', $html, $csrfMatch);
+                $csrfToken = $csrfMatch[1] ?? null;
+            }
 
             if (!$csrfToken) {
 

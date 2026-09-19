@@ -40,3 +40,11 @@ Schedule::command('scrape:html')
 Schedule::command('qozoq:warehouse-pipeline')
     ->dailyAt('08:00')
     ->withoutOverlapping();
+
+Schedule::command('crm:login')
+    ->hourly()
+    ->withoutOverlapping();
+
+Schedule::command('crm:daily-import')
+    ->dailyAt('08:30')
+    ->withoutOverlapping();

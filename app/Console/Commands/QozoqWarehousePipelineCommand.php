@@ -46,6 +46,8 @@ class QozoqWarehousePipelineCommand extends Command
             return Command::FAILURE;
         }
 
+        $this->importAdditionalFiles($token, $baseUrl);
+
         $this->info('Import muvaffaqiyatli. Export qilinmoqda...');
 
         $exportResponse = Http::withToken($token)
@@ -117,6 +119,45 @@ class QozoqWarehousePipelineCommand extends Command
         $this->info('Pipeline tugadi: ' . storage_path('app/merge/' . $outputName));
 
         return Command::SUCCESS;
+    }
+
+    private function importAdditionalFiles(string $token, string $baseUrl): void
+    {
+        $imports = [
+            ['endpoint' => 'api/import-qozoq/import', 'file' => $this->latestFile(storage_path('app/qozoq'), 'kazakhstan-uzbekistan-*.xlsx')],
+            ['endpoint' => 'api/import-eksport-qozoq/import', 'file' => $this->latestFile(storage_path('app/qozoq'), 'kazakhstan-kyrgyzstan-*.xlsx')],
+            ['endpoint' => 'api/import-eksport-qozoq/import', 'file' => $this->latestFile(storage_path('app/qozoq'), 'kazakhstan-china-*.xlsx')],
+            ['endpoint' => 'api/turkey/import', 'file' => $this->latestFile(storage_path('app/turkey'), 'turkey_scrape-*.xlsx')],
+            ['endpoint' => 'api/belarus-benyakoni/import', 'file' => $this->latestFile(storage_path('app/declarant'), 'benyakoni-*.xlsx')],
+            ['endpoint' => 'api/belarus-komenii/import', 'file' => $this->latestFile(storage_path('app/declarant'), 'kamennii-log-*.xlsx')],
+        ];
+
+        foreach ($imports as $item) {
+            if (!$item['file']) {
+                $this->warn("Fayl topilmadi, o'tkazib yuborildi: {$item['endpoint']}");
+                continue;
+            }
+
+            $this->uploadImport($token, $baseUrl, $item['endpoint'], $item['file']);
+        }
+    }
+
+    private function uploadImport(string $token, string $baseUrl, string $endpoint, string $filePath): bool
+    {
+        $this->info("Import qilinmoqda: {$filePath} -> {$endpoint}");
+
+        $response = Http::withToken($token)
+            ->timeout(120)
+            ->attach('file', file_get_contents($filePath), basename($filePath))
+            ->post("{$baseUrl}/{$endpoint}");
+
+        if (!$response->successful()) {
+            Log::error('Warehouse import failed', ['endpoint' => $endpoint, 'file' => $filePath, 'response' => $response->body()]);
+            $this->error("Warehouse import xato ({$endpoint}): " . $response->body());
+            return false;
+        }
+
+        return true;
     }
 
     private function warehouseLogin(string $baseUrl): ?string
