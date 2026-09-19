@@ -62,7 +62,9 @@ class QoldauScrapeCommand extends Command
 
                 $this->info("Page: $page");
 
-                $response = Http::get(
+                $response = Http::withOptions([
+                    'verify' => false,
+                ])->get(
                     'https://cgr.qoldau.kz/ru/registry/scoreboard',
                     [
                         'flTruckNumber' => '',
@@ -163,7 +165,9 @@ class QoldauScrapeCommand extends Command
 
     private function detectLastPage($checkpoint)
     {
-        $response = Http::get(
+        $response = Http::withOptions([
+            'verify' => false,
+        ])->get(
             'https://cgr.qoldau.kz/ru/registry/scoreboard',
             [
                 'flCheckpoint' => $checkpoint,
