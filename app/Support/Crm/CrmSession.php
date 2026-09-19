@@ -10,9 +10,12 @@ use Facebook\WebDriver\WebDriverBy;
 use Facebook\WebDriver\WebDriverElement;
 use Facebook\WebDriver\WebDriverExpectedCondition;
 use Facebook\WebDriver\WebDriverWait;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use RuntimeException;
 use Symfony\Component\Process\Process;
 use Throwable;
+use ZipArchive;
 
 /**
  * Zanjeer CRM bilan headless Chrome orqali ishlash uchun umumiy yordamchi.
@@ -45,7 +48,8 @@ class CrmSession
         $process = null;
 
         if ($fresh || ! self::isChromedriverRunning($url)) {
-            $process = self::startChromedriver($config['chromedriver_binary']);
+            $driverBinary = self::ensureMatchingChromedriver($config);
+            $process = self::startChromedriver($driverBinary);
         }
 
         $options = new ChromeOptions();
@@ -281,6 +285,167 @@ class CrmSession
 
             usleep(700_000);
         }
+    }
+
+    /**
+     * Chrome va chromedriver versiyalarini solishtiradi. Mos kelmasa
+     * (masalan Chrome fonda avtomatik yangilanib ketgan bo'lsa), Chrome for
+     * Testing manzilidan Chrome versiyasiga mos chromedriver'ni avtomatik
+     * yuklab, joriy chromedriver_binary faylini shu bilan almashtiradi —
+     * shu tufayli buyruq har safar qo'lda tuzatishga muhtoj bo'lmaydi.
+     *
+     * Tarmoqqa faqat versiyalar mos kelmaganda murojaat qilinadi; mos
+     * bo'lsa hech qanday tarmoq so'rovi yubormaydi (faqat --version orqali
+     * tekshiradi). Tuzatib bo'lmasa (masalan internet yo'q), xatoni faqat
+     * log'ga yozib, mavjud faylni o'zgartirmasdan qaytaradi — shunda odatdagi
+     * "session not created" xatosi baribir chiqadi, lekin butun buyruq
+     * kutilmagan tarzda qulab tushmaydi.
+     */
+    private static function ensureMatchingChromedriver(array $config): string
+    {
+        $driverBinary = $config['chromedriver_binary'];
+        $chromeBinary = $config['chrome_binary'] ?: 'google-chrome';
+
+        try {
+            $chromeVersion = self::detectVersion($chromeBinary);
+
+            if (! $chromeVersion) {
+                return $driverBinary;
+            }
+
+            $driverVersion = file_exists($driverBinary) ? self::detectVersion($driverBinary) : null;
+
+            if ($driverVersion && self::majorVersion($driverVersion) === self::majorVersion($chromeVersion)) {
+                return $driverBinary;
+            }
+
+            Log::info('Chromedriver versiyasi Chrome bilan mos kelmadi, avtomatik yangilanmoqda', [
+                'chrome_version' => $chromeVersion,
+                'driver_version' => $driverVersion,
+            ]);
+
+            return self::downloadMatchingChromedriver($chromeVersion, $driverBinary);
+        } catch (Throwable $e) {
+            Log::warning('Chromedriver avtomatik yangilanmadi: ' . $e->getMessage());
+
+            return $driverBinary;
+        }
+    }
+
+    private static function detectVersion(string $binary): ?string
+    {
+        $process = new Process([$binary, '--version']);
+        $process->run();
+
+        $output = $process->getOutput() . $process->getErrorOutput();
+
+        return preg_match('/(\d+\.\d+\.\d+\.\d+)/', $output, $m) ? $m[1] : null;
+    }
+
+    private static function majorVersion(string $version): string
+    {
+        return explode('.', $version)[0];
+    }
+
+    private static function platformKey(): string
+    {
+        return match (PHP_OS_FAMILY) {
+            'Windows' => 'win64',
+            'Darwin' => str_contains(php_uname('m'), 'arm') ? 'mac-arm64' : 'mac-x64',
+            default => 'linux64',
+        };
+    }
+
+    private static function downloadMatchingChromedriver(string $chromeVersion, string $destPath): string
+    {
+        $response = Http::timeout(30)->get(
+            'https://googlechromelabs.github.io/chrome-for-testing/known-good-versions-with-downloads.json'
+        );
+
+        if (! $response->successful()) {
+            throw new RuntimeException('Chrome for Testing ro\'yxatini olib bo\'lmadi.');
+        }
+
+        $versions = $response->json('versions', []);
+        $platform = self::platformKey();
+
+        $entry = collect($versions)->firstWhere('version', $chromeVersion);
+
+        if (! $entry) {
+            // Aynan shu versiya "known-good" ro'yxatida hali bo'lmasligi
+            // mumkin (juda yangi chiqarilgan bo'lsa) — bir xil major
+            // versiyadagi eng oxirgisini olamiz.
+            $major = self::majorVersion($chromeVersion);
+
+            $entry = collect($versions)
+                ->filter(fn ($v) => self::majorVersion($v['version']) === $major)
+                ->last();
+        }
+
+        if (! $entry) {
+            throw new RuntimeException("Chrome {$chromeVersion} uchun mos chromedriver topilmadi.");
+        }
+
+        $downloadUrl = collect($entry['downloads']['chromedriver'] ?? [])
+            ->firstWhere('platform', $platform)['url'] ?? null;
+
+        if (! $downloadUrl) {
+            throw new RuntimeException("'{$platform}' uchun chromedriver havolasi topilmadi.");
+        }
+
+        $zipResponse = Http::timeout(60)->get($downloadUrl);
+
+        if (! $zipResponse->successful()) {
+            throw new RuntimeException("Chromedriver zip yuklab bo'lmadi: {$downloadUrl}");
+        }
+
+        $tmpDir = sys_get_temp_dir() . '/crm-chromedriver-' . uniqid();
+        mkdir($tmpDir, 0777, true);
+        $zipPath = $tmpDir . '/chromedriver.zip';
+        file_put_contents($zipPath, $zipResponse->body());
+
+        $zip = new ZipArchive();
+
+        if ($zip->open($zipPath) !== true) {
+            throw new RuntimeException('Chromedriver zip ochilmadi.');
+        }
+
+        $zip->extractTo($tmpDir);
+        $zip->close();
+
+        $binaryName = PHP_OS_FAMILY === 'Windows' ? 'chromedriver.exe' : 'chromedriver';
+        $extracted = glob($tmpDir . '/*/' . $binaryName);
+
+        if (empty($extracted)) {
+            throw new RuntimeException('Yuklangan zip ichida chromedriver topilmadi.');
+        }
+
+        $destDir = dirname($destPath);
+
+        if (! is_dir($destDir)) {
+            mkdir($destDir, 0777, true);
+        }
+
+        copy($extracted[0], $destPath);
+
+        if (PHP_OS_FAMILY !== 'Windows') {
+            chmod($destPath, 0755);
+        }
+
+        self::deleteDirectory($tmpDir);
+
+        Log::info("Chromedriver {$destPath} ga yangilandi.");
+
+        return $destPath;
+    }
+
+    private static function deleteDirectory(string $dir): void
+    {
+        foreach (glob($dir . '/*') ?: [] as $item) {
+            is_dir($item) ? self::deleteDirectory($item) : @unlink($item);
+        }
+
+        @rmdir($dir);
     }
 
     private static function isChromedriverRunning(string $url): bool
