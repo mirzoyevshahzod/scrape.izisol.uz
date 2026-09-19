@@ -118,7 +118,55 @@ class QozoqWarehousePipelineCommand extends Command
 
         $this->info('Pipeline tugadi: ' . storage_path('app/merge/' . $outputName));
 
+        $this->enrichMergedFile($outputName);
+
         return Command::SUCCESS;
+    }
+
+    /**
+     * Birlashtirilgan faylni Zanjeer CRM'dan operator nomi (scrape:zanjeer-operators)
+     * va orginfo.uz'dan INN (excel:fill-inn) bilan to'ldirib, alohida yakuniy
+     * faylga saqlaydi. Bu bosqich hozircha hech qayerga avtomatik
+     * yuklamaydi — faqat storage/app/merge'da tayyor turadi.
+     *
+     * Muvaffaqiyatsiz bo'lsa ham asosiy pipeline natijasiga (SUCCESS) ta'sir
+     * qilmaydi — faqat log'ga yozib, ogohlantirish chiqaradi.
+     */
+    private function enrichMergedFile(string $mergedFileName): void
+    {
+        try {
+            $this->info('Operator nomlari qo\'shilmoqda (scrape:zanjeer-operators)...');
+
+            Artisan::call('scrape:zanjeer-operators', ['file' => 'merge/' . $mergedFileName]);
+            $this->info(Artisan::output());
+
+            $lastOperatorFilePath = storage_path('app/last_operator_file.txt');
+
+            if (!file_exists($lastOperatorFilePath)) {
+                throw new \RuntimeException('last_operator_file.txt topilmadi.');
+            }
+
+            $operatorsFile = trim(file_get_contents($lastOperatorFilePath));
+
+            if (!$operatorsFile || !file_exists($operatorsFile)) {
+                throw new \RuntimeException("Operator fayli topilmadi: {$operatorsFile}");
+            }
+
+            $this->info('INN qo\'shilmoqda (excel:fill-inn, orginfo.uz)...');
+
+            $finalOutput = storage_path('app/merge/final-' . now()->format('Y-m-d_H-i-s') . '.xlsx');
+
+            Artisan::call('excel:fill-inn', [
+                'file' => $operatorsFile,
+                'output' => $finalOutput,
+            ]);
+            $this->info(Artisan::output());
+
+            $this->info("Yakuniy fayl tayyor: {$finalOutput}");
+        } catch (\Throwable $e) {
+            Log::error('Merged faylni boyitish (operator/INN) muvaffaqiyatsiz', ['error' => $e->getMessage()]);
+            $this->warn('Operator/INN qo\'shish bosqichida xato: ' . $e->getMessage());
+        }
     }
 
     private function importAdditionalFiles(string $token, string $baseUrl): void
