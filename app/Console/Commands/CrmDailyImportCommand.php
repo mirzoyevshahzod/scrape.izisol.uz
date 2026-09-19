@@ -61,11 +61,25 @@ class CrmDailyImportCommand extends Command
             return self::FAILURE;
         }
 
+        $pipelines = [
+            'Kazakhstan - Russia' => fn () => $this->importKazakhstanRussia($session, $config, $timeout),
+            'Turkey' => fn () => $this->importTurkey($session, $config, $timeout),
+            'Zitic' => fn () => $this->importZitic($session, $config, $timeout),
+            'Declarant' => fn () => $this->importDeclarant($session, $config, $timeout),
+        ];
+
         try {
-            $this->importKazakhstanRussia($session, $config, $timeout);
-            $this->importTurkey($session, $config, $timeout);
-            $this->importZitic($session, $config, $timeout);
-            $this->importDeclarant($session, $config, $timeout);
+            foreach ($pipelines as $label => $pipeline) {
+                try {
+                    $pipeline();
+                } catch (Throwable $e) {
+                    // Kutilmagan xato (masalan konvert bosqichidagi bug) bitta
+                    // bosqichni to'xtatsin, lekin qolgan bosqichlar davom etsin.
+                    Log::error('CRM daily-import pipeline failed', ['pipeline' => $label, 'error' => $e->getMessage()]);
+                    $this->error("XATO ({$label}): " . $e->getMessage());
+                    $this->results[] = ['group' => $label, 'border' => '-', 'status' => 'error', 'message' => $e->getMessage()];
+                }
+            }
         } finally {
             $session->quit();
         }
@@ -205,23 +219,31 @@ class CrmDailyImportCommand extends Command
         ];
 
         foreach ($zones as $zone => $border) {
-            $sourceFile = $this->latestFile(storage_path('app/declarant'), $zone . '-*.xlsx');
+            try {
+                $sourceFile = $this->latestFile(storage_path('app/declarant'), $zone . '-*.xlsx');
 
-            if (! $sourceFile) {
-                $this->warn("{$zone} fayli topilmadi, o'tkazib yuborildi.");
-                $this->results[] = ['group' => 'Declarant', 'border' => $border, 'status' => 'skip', 'message' => 'Manba fayl topilmadi'];
+                if (! $sourceFile) {
+                    $this->warn("{$zone} fayli topilmadi, o'tkazib yuborildi.");
+                    $this->results[] = ['group' => 'Declarant', 'border' => $border, 'status' => 'skip', 'message' => 'Manba fayl topilmadi'];
 
-                continue;
+                    continue;
+                }
+
+                $converted = $this->tmpPath($zone . '_converted');
+
+                Artisan::call('declarant:convert', ['input' => $sourceFile, 'output' => $converted]);
+                $this->line(Artisan::output());
+
+                $this->importOne('Declarant', $border, $converted, $session, $config, $timeout);
+
+                @unlink($converted);
+            } catch (Throwable $e) {
+                // Bitta zona (masalan benyakoni) konvert bosqichida qulasa
+                // ham, ikkinchisi (kamennii-log) baribir sinab ko'rilsin.
+                Log::error('Declarant convert/import failed', ['zone' => $zone, 'error' => $e->getMessage()]);
+                $this->error("XATO ({$border}) konvert/import bosqichida: " . $e->getMessage());
+                $this->results[] = ['group' => 'Declarant', 'border' => $border, 'status' => 'error', 'message' => $e->getMessage()];
             }
-
-            $converted = $this->tmpPath($zone . '_converted');
-
-            Artisan::call('declarant:convert', ['input' => $sourceFile, 'output' => $converted]);
-            $this->line(Artisan::output());
-
-            $this->importOne('Declarant', $border, $converted, $session, $config, $timeout);
-
-            @unlink($converted);
         }
     }
 

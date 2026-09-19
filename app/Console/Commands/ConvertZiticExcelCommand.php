@@ -45,20 +45,22 @@ class ConvertZiticExcelCommand extends Command
 
         $newRow = 2;
 
-        foreach ($sheet->getRowIterator(2) as $row) {
+        if ($sheet->getHighestRow() >= 2) {
+            foreach ($sheet->getRowIterator(2) as $row) {
 
-            $plate = trim((string) $sheet->getCell('A' . $row->getRowIndex())->getValue());
+                $plate = trim((string) $sheet->getCell('A' . $row->getRowIndex())->getValue());
 
-            $date = trim((string) $sheet->getCell('C' . $row->getRowIndex())->getFormattedValue());
+                $date = trim((string) $sheet->getCell('C' . $row->getRowIndex())->getFormattedValue());
 
-            if ($plate == '') {
-                continue;
+                if ($plate == '') {
+                    continue;
+                }
+
+                $newSheet->setCellValue('A' . $newRow, $plate);
+                $newSheet->setCellValue('B' . $newRow, $date);
+
+                $newRow++;
             }
-
-            $newSheet->setCellValue('A' . $newRow, $plate);
-            $newSheet->setCellValue('B' . $newRow, $date);
-
-            $newRow++;
         }
 
         $writer = new Xlsx($newSpreadsheet);

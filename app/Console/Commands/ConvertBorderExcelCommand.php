@@ -37,30 +37,32 @@ class ConvertBorderExcelCommand extends Command
 
         $row = 2;
 
-        foreach ($sheet->getRowIterator(2) as $excelRow) {
+        if ($sheet->getHighestRow() >= 2) {
+            foreach ($sheet->getRowIterator(2) as $excelRow) {
 
-            $index = $excelRow->getRowIndex();
+                $index = $excelRow->getRowIndex();
 
-            $carNumber = trim((string)$sheet->getCell("C{$index}")->getValue());
-            $date = trim((string)$sheet->getCell("D{$index}")->getFormattedValue());
+                $carNumber = trim((string)$sheet->getCell("C{$index}")->getValue());
+                $date = trim((string)$sheet->getCell("D{$index}")->getFormattedValue());
 
-            if ($carNumber == '') {
-                continue;
+                if ($carNumber == '') {
+                    continue;
+                }
+
+                try {
+                    $date = Carbon::createFromFormat(
+                        'd.m.Y H:i:s',
+                        $date
+                    )->format('Y-m-d H:i:s');
+                } catch (\Exception $e) {
+                    $date = null;
+                }
+
+                $newSheet->setCellValue("A{$row}", $carNumber);
+                $newSheet->setCellValue("B{$row}", $date);
+
+                $row++;
             }
-
-            try {
-                $date = Carbon::createFromFormat(
-                    'd.m.Y H:i:s',
-                    $date
-                )->format('Y-m-d H:i:s');
-            } catch (\Exception $e) {
-                $date = null;
-            }
-
-            $newSheet->setCellValue("A{$row}", $carNumber);
-            $newSheet->setCellValue("B{$row}", $date);
-
-            $row++;
         }
 
         $writer = new Xlsx($newSpreadsheet);

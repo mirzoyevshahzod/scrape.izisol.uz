@@ -38,24 +38,26 @@ class ConvertDeclarantExcelCommand extends Command
 
         $newRow = 2;
 
-        foreach ($sheet->getRowIterator(2) as $row) {
+        if ($sheet->getHighestRow() >= 2) {
+            foreach ($sheet->getRowIterator(2) as $row) {
 
-            $rowIndex = $row->getRowIndex();
+                $rowIndex = $row->getRowIndex();
 
-            // C ustun - Registratsiya raqami
-            $plate = trim((string) $sheet->getCell('C' . $rowIndex)->getValue());
+                // C ustun - Registratsiya raqami
+                $plate = trim((string) $sheet->getCell('C' . $rowIndex)->getValue());
 
-            // D ustun - Sana
-            $date = trim((string) $sheet->getCell('D' . $rowIndex)->getFormattedValue());
+                // D ustun - Sana
+                $date = trim((string) $sheet->getCell('D' . $rowIndex)->getFormattedValue());
 
-            if ($plate === '') {
-                continue;
+                if ($plate === '') {
+                    continue;
+                }
+
+                $newSheet->setCellValue('A' . $newRow, $plate);
+                $newSheet->setCellValue('B' . $newRow, $date);
+
+                $newRow++;
             }
-
-            $newSheet->setCellValue('A' . $newRow, $plate);
-            $newSheet->setCellValue('B' . $newRow, $date);
-
-            $newRow++;
         }
 
         $writer = new Xlsx($newSpreadsheet);

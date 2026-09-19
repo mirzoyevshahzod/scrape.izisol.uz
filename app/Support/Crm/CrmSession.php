@@ -140,12 +140,19 @@ class CrmSession
         });
 
         $this->selectBorder($dialog, $driver, $borderName, $timeout);
+
+        // Granitsa tanlangandan keyin Livewire oynani qayta render qilishi
+        // mumkin (eski $dialog/$fileInput handle'lari "stale" bo'lib qoladi),
+        // shuning uchun fayl biriktirishdan oldin oynani qayta topamiz.
+        $dialog = $this->freshDialog($driver);
         $this->attachFile($dialog, $filePath);
 
-        $saveButton = $dialog->findElement(WebDriverBy::xpath(".//button[normalize-space()='Сохранить']"));
-        $saveButton->click();
+        $this->saveWithRetry($driver, $timeout);
+    }
 
-        $this->waitForSaveResult($driver, $timeout);
+    private function freshDialog(RemoteWebDriver $driver): WebDriverElement
+    {
+        return $driver->findElement(WebDriverBy::cssSelector('dialog[open]'));
     }
 
     public function quit(): void
@@ -220,31 +227,59 @@ class CrmSession
         $fileInput->sendKeys($filePath);
     }
 
-    private function waitForSaveResult(RemoteWebDriver $driver, int $timeout): void
+    /**
+     * "Сохранить"ni bosadi va natijani kutadi. Livewire fayl yuklashni
+     * (wire:model.defer) asinxron — orqa fonda AJAX orqali — amalga
+     * oshiradi, shuning uchun fayl biriktirilgach darhol saqlashga urinilsa,
+     * ba'zida "Поле file обязательно для заполнения" xatosi chiqadi (fayl
+     * hali yuklanib ulgurmagan). Shu xato chiqqanda, umumiy $timeout
+     * doirasida bir necha marta qayta "Сохранить"ni bosib ko'radi.
+     * Boshqa turdagi xato chiqsa — darhol RuntimeException tashlaydi.
+     */
+    private function saveWithRetry(RemoteWebDriver $driver, int $timeout): void
     {
-        $wait = new WebDriverWait($driver, $timeout);
+        $deadline = microtime(true) + $timeout;
 
-        try {
-            $wait->until(function (RemoteWebDriver $d) {
-                try {
-                    $d->findElement(WebDriverBy::cssSelector('dialog[open]'));
+        while (true) {
+            $dialog = $this->freshDialog($driver);
+            $dialog->findElement(WebDriverBy::xpath(".//button[normalize-space()='Сохранить']"))->click();
 
-                    return false; // oyna hali ochiq — kutishda davom etamiz
-                } catch (NoSuchElementException $e) {
-                    return true; // oyna yopildi — muvaffaqiyat belgisi
-                }
-            });
-        } catch (Throwable $e) {
-            $message = "Import oynasi kutilgan vaqtda yopilmadi (xatolik xabari bo'lishi mumkin).";
+            $remaining = max(1, (int) ceil($deadline - microtime(true)));
+            $perAttemptWait = new WebDriverWait($driver, min(10, $remaining));
 
             try {
-                $dialog = $driver->findElement(WebDriverBy::cssSelector('dialog[open]'));
-                $message .= ' Oynadagi matn: ' . trim($dialog->getText());
-            } catch (Throwable $inner) {
-                //
+                $perAttemptWait->until(function (RemoteWebDriver $d) {
+                    try {
+                        $d->findElement(WebDriverBy::cssSelector('dialog[open]'));
+
+                        return false; // oyna hali ochiq
+                    } catch (NoSuchElementException $e) {
+                        return true; // oyna yopildi — muvaffaqiyat
+                    }
+                });
+
+                return;
+            } catch (Throwable $e) {
+                // oyna hali ochiq — nega ekanini tekshiramiz
             }
 
-            throw new RuntimeException($message);
+            $dialog = $this->freshDialog($driver);
+            $text = trim($dialog->getText());
+
+            $isFileUploadPending = str_contains($text, 'обязательно для заполнения')
+                && stripos($text, 'file') !== false;
+
+            if (! $isFileUploadPending) {
+                throw new RuntimeException("Saqlash muvaffaqiyatsiz. Oynadagi matn: {$text}");
+            }
+
+            if (microtime(true) >= $deadline) {
+                throw new RuntimeException(
+                    "Fayl yuklanishi kutilgan vaqtda tugamadi (ehtimol internet/server sekin). Oxirgi xabar: {$text}"
+                );
+            }
+
+            usleep(700_000);
         }
     }
 
