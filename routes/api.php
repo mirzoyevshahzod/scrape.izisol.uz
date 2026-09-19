@@ -52,11 +52,6 @@ Route::post('/scrape/declarant', [ScrapeController::class, 'scrape'])->name('scr
 Route::get('/scrape/files', [ScrapeController::class, 'files']);
 Route::get('/scrape/download', [ScrapeController::class, 'download']);
 
-Route::post('/belarus/scrape/download', [ScrapeController::class, 'FileDownload']);
-Route::get('/belarus/details/{id}', [ScrapeController::class, 'getBelarusDetails']);
-Route::get('/scrape/check', [ScrapeController::class, 'check']);
-Route::get('/docs/checkpoint', [ScrapeController::class, 'checkpointDocsDocx']);
-
 Route::post('/scrape/{zone}',[ScrapeController::class, 'scrape']);
 Route::get('/scrape/files', [ScrapeController::class, 'files']);
 Route::get('/scrape/download', [ScrapeController::class, 'download']);
