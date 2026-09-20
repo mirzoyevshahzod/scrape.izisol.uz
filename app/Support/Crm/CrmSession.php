@@ -4,6 +4,7 @@ namespace App\Support\Crm;
 
 use Facebook\WebDriver\Chrome\ChromeOptions;
 use Facebook\WebDriver\Exception\NoSuchElementException;
+use Facebook\WebDriver\Exception\StaleElementReferenceException;
 use Facebook\WebDriver\Remote\DesiredCapabilities;
 use Facebook\WebDriver\Remote\RemoteWebDriver;
 use Facebook\WebDriver\WebDriverBy;
@@ -173,16 +174,22 @@ class CrmSession
 
     private function selectBorder(WebDriverElement $dialog, RemoteWebDriver $driver, string $borderName, int $timeout): void
     {
-        $trigger = $dialog->findElement(WebDriverBy::cssSelector('button[data-flux-select-button]'));
-        $trigger->click();
+        $dialog->findElement(WebDriverBy::cssSelector('button[data-flux-select-button]'))->click();
 
+        $dialog = $this->freshDialog($driver);
         $search = $dialog->findElement(WebDriverBy::cssSelector('input[placeholder="Search..."]'));
         $search->clear();
         $search->sendKeys($borderName);
 
         $wait = new WebDriverWait($driver, $timeout);
 
-        $option = $wait->until(function () use ($dialog, $borderName) {
+        // Qidiruvga yozilgach Livewire ro'yxatni (va ba'zan butun oynani)
+        // qayta render qilishi mumkin — shu tufayli oldingi $dialog/$option
+        // handle'lari "stale" bo'lib qoladi. Har urinishda oynani qaytadan
+        // topamiz va StaleElementReferenceException chiqsa, keyingi urinishda
+        // davom etamiz (throw qilib yubormaymiz).
+        $findOption = function () use ($driver, $borderName) {
+            $dialog = $this->freshDialog($driver);
             $options = $dialog->findElements(WebDriverBy::cssSelector('[role="option"]'));
 
             foreach ($options as $option) {
@@ -192,9 +199,18 @@ class CrmSession
             }
 
             return null;
+        };
+
+        $option = $wait->until(function () use ($findOption) {
+            try {
+                return $findOption();
+            } catch (StaleElementReferenceException $e) {
+                return null;
+            }
         });
 
         if (! $option) {
+            $dialog = $this->freshDialog($driver);
             $visible = array_map(
                 fn (WebDriverElement $o) => $o->getText(),
                 $dialog->findElements(WebDriverBy::cssSelector('[role="option"]'))
@@ -205,7 +221,28 @@ class CrmSession
             );
         }
 
-        $option->click();
+        // Variant topilgandan keyin ham, klik paytida Livewire qayta render
+        // qilib yuborishi mumkin — shunday holatda variant qaytadan izlanadi
+        // va yana bosishga urinib ko'riladi.
+        $deadline = microtime(true) + $timeout;
+
+        while (true) {
+            try {
+                $option->click();
+
+                return;
+            } catch (StaleElementReferenceException $e) {
+                if (microtime(true) >= $deadline) {
+                    throw $e;
+                }
+
+                $option = $findOption();
+
+                if (! $option) {
+                    throw $e;
+                }
+            }
+        }
     }
 
     private function attachFile(WebDriverElement $dialog, string $filePath): void
