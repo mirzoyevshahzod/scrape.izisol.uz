@@ -37,7 +37,7 @@ return [
 
     'telegram' => [
         'bot_token' => env('TELEGRAM_BOT_TOKEN'),
-        'daily_files_bot_token' => env('TELEGRAM_BOT_TOKEN1'),
+        'daily_files_bot_token' => env('TELEGRAM_SCRAPING_BOT_TOKEN'),
     ],
 
     'checkpoint_scraper' => [

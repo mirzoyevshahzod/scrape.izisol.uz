@@ -6,7 +6,7 @@ use Illuminate\Support\Facades\Http;
 
 /**
  * Kunlik pipeline fayllarini/xabarlarini Telegram orqali yuborish uchun
- * yordamchi. `TELEGRAM_BOT_TOKEN1` (config('services.telegram.daily_files_bot_token'))
+ * yordamchi. `TELEGRAM_SCRAPING_BOT_TOKEN` (config('services.telegram.daily_files_bot_token'))
  * botidan foydalanadi — bu webhookda ishlatilayotgan asosiy bot
  * (`TELEGRAM_BOT_TOKEN`) bilan bir xil emas.
  */
