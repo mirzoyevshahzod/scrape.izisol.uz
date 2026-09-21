@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Support\Telegram\PipelineStatus;
+use App\Support\Telegram\SentFilesTracker;
 use App\Support\Telegram\TelegramSender;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
@@ -71,6 +72,12 @@ class SendDailyFilesToTelegram extends Command
             }
 
             foreach ($item['chats'] as $chatId) {
+                if (SentFilesTracker::alreadySent($chatId, $file)) {
+                    $this->line("{$item['label']}: {$chatId}'ga bugun allaqachon yuborilgan, o'tkazib yuborildi.");
+
+                    continue;
+                }
+
                 $sent = $sender->sendDocument($chatId, $file, $item['label'] . ' — ' . $today);
 
                 if (! $sent) {
@@ -78,6 +85,7 @@ class SendDailyFilesToTelegram extends Command
                     PipelineStatus::recordFailure("telegram:send-daily-files [{$item['label']}]", "Telegram'ga ({$chatId}) yuborib bo'lmadi.");
                     $hasFailure = true;
                 } else {
+                    SentFilesTracker::markSent($chatId, $file);
                     $this->info("{$item['label']}: {$chatId}'ga yuborildi ({$file}).");
                 }
             }
