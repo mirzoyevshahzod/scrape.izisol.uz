@@ -11,6 +11,8 @@ class MergeExcelFilesController extends Controller
 {
     public function merge(Request $request)
     {
+        ini_set('memory_limit', '512M');
+
         $request->validate([
             'excel_files' => 'required|array|min:1',
             'excel_files.*' => 'required|file|mimes:xlsx,xls,csv',

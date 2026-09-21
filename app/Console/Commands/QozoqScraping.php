@@ -14,7 +14,7 @@ class QozoqScraping extends Command
     protected $description = 'Scrape all Qozoq checkpoints and send all vehicle records to API';
 
     private string $apiUrl =
-        'https://b670-93-188-81-10.ngrok-free.app/api/checkpoints/queue-records';
+        'https://358b-93-188-81-10.ngrok-free.app/api/checkpoints/queue-records';
 
     public function handle()
     {
