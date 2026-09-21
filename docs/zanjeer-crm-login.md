@@ -25,8 +25,11 @@ Har bir granitsa mustaqil ravishda `try/catch` qilinadi — biri xato bersa ham,
 ## Talab qilinadigan narsalar
 
 - PHP paketlar: `php-webdriver/webdriver`, `symfony/process` (`composer.json`da bor, `composer install` qilingan bo'lishi kerak).
-- Serverda **Chrome yoki Chromium** va unga **mos versiyadagi** `chromedriver` o'rnatilgan bo'lishi kerak.
-- `.env` faylida quyidagilar to'g'ri to'ldirilgan bo'lishi kerak:
+- Chrome/chromedriver ikki xil usulda ta'minlanishi mumkin — **lokal** (serverning o'zida) yoki **uzoqdagi Selenium Grid** (masalan Docker'dagi `selenium/standalone-chrome`) orqali. `CrmSession` ikkalasini ham qo'llab-quvvatlaydi (fayl yuklash `LocalFileDetector` orqali amalga oshadi — brauzer boshqa fayl tizimida, masalan Docker konteyner ichida ishlasa ham, fayl avtomatik shu yerga yuklanadi).
+
+### A. Lokal chromedriver
+
+Serverda **Chrome yoki Chromium** va unga **mos versiyadagi** `chromedriver` o'rnatilgan bo'lishi kerak.
 
 ```env
 CRM_BASE_URL=https://crm.zanjeer.uz
@@ -38,6 +41,25 @@ CHROMEDRIVER_URL=http://127.0.0.1:9515
 CHROMEDRIVER_BINARY=/usr/bin/chromedriver
 CHROME_BINARY=/usr/bin/google-chrome
 ```
+
+### B. Docker'dagi Selenium Grid
+
+Chrome/chromedriver versiyalarini serverda qo'lda kuzatib yurishga hojat qoldirmaydi — `selenium/standalone-chrome` image'i ikkalasini ham bir xil, mos versiyada o'zi bilan olib keladi.
+
+```bash
+docker run -d --name selenium-chrome --restart unless-stopped \
+  --shm-size=2g -p 4444:4444 selenium/standalone-chrome
+```
+
+```env
+CHROMEDRIVER_URL=http://127.0.0.1:4444
+CHROMEDRIVER_BINARY=/usr/bin/chromedriver
+CHROME_BINARY=
+```
+
+`CHROME_BINARY`ni **bo'sh qoldiring** — aks holda host serverdagi binary yo'li Chrome capability sifatida Grid node'iga yuboriladi va konteyner ichida mos kelmasligi mumkin. `CHROMEDRIVER_URL` allaqachon ishlab turgan Grid'ga ishora qilgani uchun `CHROMEDRIVER_BINARY` va lokal chromedriver avtomatik yangilash mantig'i (pastda) umuman ishlatilmaydi.
+
+> **Muhim (docker0 + custom firewall)**: agar serverda Docker'ning standart `docker0` bridge tarmog'idan tashqari, iptables orqali maxsus ruxsat berilgan boshqa (custom) bridge tarmoq ham bo'lsa (masalan `docker5`), standart `docker0`dagi konteynerlarning internetga chiqishi (`FORWARD` zanjiri) bloklangan bo'lishi mumkin — `chromedriver va brauzer tayyorlanmoqda...` dan keyin sahifa ochilishida "Operation timed out ... 0 bytes received" xatosi shu sababdan chiqadi. Buni `docker exec selenium-chrome curl -v https://crm.zanjeer.uz` bilan tekshiring. Agar shunday bo'lsa, `sudo iptables -L DOCKER-FORWARD -n -v` orqali qaysi bridge uchun `ACCEPT` qoidalari borligini solishtiring va yetishmayotganini (odatda ikkita qoida: `-i docker0 -j ACCEPT` va `-o docker0 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT`) qo'shing. Bu qoidalar server qayta yuklanganda yo'qolib qolmasligi uchun, ularni to'g'ridan-to'g'ri host firewall konfiguratsiyasiga (masalan ISPmanager'ning `/etc/ispiptable.conf`) yozmasdan, alohida `docker0-forward-fix.service` nomli systemd xizmati orqali (`After=iptables-restore.service`, yoki serverdagi tegishli boot-time firewall-restore xizmatidan keyin) har safar boot'da qayta qo'shib turing.
 
 `crm:login` scheduler orqali har soatda avtomatik ishga tushadi (`routes/console.php`), chunki CRM sessiyasi ~120 daqiqada tugaydi.
 
@@ -161,7 +183,7 @@ Haqiqiy nomni tekshirish uchun CRM saytida qo'lda "Импортировать" o
 
 ### 8. Fayl biriktirilmadi / "Сохранить" bosilgandan keyin oyna yopilmaydi
 
-- **Fayl yo'li noto'g'ri**: `crm:import-custom-operations`ga (yoki `crm:daily-import` ichidagi vaqtinchalik konvert qilingan faylga) beriladigan yo'l **shu buyruq ishlayotgan serverning o'zidagi** to'liq (absolute) yo'l bo'lishi kerak — chunki brauzer faylni to'g'ridan-to'g'ri shu serverning diskidan o'qiydi (uzoqdagi Selenium Grid emas). Nisbiy yo'l yoki boshqa serverdagi yo'l ishlamaydi.
+- **Fayl yo'li noto'g'ri**: `crm:import-custom-operations`ga (yoki `crm:daily-import` ichidagi vaqtinchalik konvert qilingan faylga) beriladigan yo'l **`php artisan` buyrug'i ishlayotgan jarayon o'qiy oladigan** to'liq (absolute) yo'l bo'lishi kerak. Nisbiy yo'l ishlamaydi. Fayl yuklash `LocalFileDetector` orqali amalga oshadi (`app/Support/Crm/CrmSession.php`dagi `attachFile()`) — u faylni shu yo'ldan o'qib, brauzer qayerda ishlayotgan bo'lsa (lokal chromedriver yoki Docker'dagi Selenium Grid), o'sha yerga avtomatik yuklab beradi, shuning uchun brauzer boshqa fayl tizimida (masalan konteyner ichida) ishlasa ham muammo bo'lmasligi kerak.
 - **Oyna yopilmasa** — xato xabari ehtimol CRM validatsiyasidan (masalan noto'g'ri formatdagi Excel, bo'sh fayl). Buyruq xato xabarida oynadagi matnni ko'rsatadi (`Oynadagi matn: ...`) — shu matnga qarab sababni aniqlang.
 
 ## Foydali diagnostika buyruqlari

@@ -6,6 +6,7 @@ use Facebook\WebDriver\Chrome\ChromeOptions;
 use Facebook\WebDriver\Exception\NoSuchElementException;
 use Facebook\WebDriver\Exception\StaleElementReferenceException;
 use Facebook\WebDriver\Remote\DesiredCapabilities;
+use Facebook\WebDriver\Remote\LocalFileDetector;
 use Facebook\WebDriver\Remote\RemoteWebDriver;
 use Facebook\WebDriver\WebDriverBy;
 use Facebook\WebDriver\WebDriverElement;
@@ -26,10 +27,13 @@ use ZipArchive;
  * klassdan foydalanadi — chromedriver'ni ishga tushirish, CRM'ga login
  * qilish va "Импортировать" oynasi orqali fayl yuklash kodi bir joyda.
  *
- * MUHIM: bu klass chromedriver va Chrome/Chromium ARTISAN BUYRUG'I ishlayotgan
- * SERVERNING O'ZIDA ishlashini nazarda tutadi — fayl yuklashda beriladigan
- * $filePath shu serverdagi yo'l bo'lishi kerak, chunki brauzer xuddi shu
- * serverda ishlaydi va faylni to'g'ridan-to'g'ri diskdan o'qiydi.
+ * `chromedriver_url` (CHROMEDRIVER_URL) yoki lokal chromedriver'ga, yoki
+ * uzoqdagi Selenium Grid'ga (masalan Docker'dagi `selenium/standalone-chrome`)
+ * ishora qilishi mumkin. Ikkala holatda ham $filePath shu buyruq ishlayotgan
+ * PHP jarayoni o'qiy oladigan yo'l bo'lishi kerak — fayl yuklash
+ * `LocalFileDetector` orqali amalga oshadi (`attachFile()`ga qarang), u faylni
+ * shu yerdan o'qib, brauzer qayerda ishlayotgan bo'lsa (lokal yoki Grid
+ * node'ining o'zida) o'sha yerga avtomatik yuklab beradi.
  */
 class CrmSession
 {
@@ -262,9 +266,14 @@ class CrmSession
             [$fileInput]
         );
 
-        // MUHIM: $filePath shu buyruq ishlayotgan SERVERDAGI yo'l bo'lishi
-        // kerak, chunki chromedriver/Chrome xuddi shu serverda ishlaydi va
-        // faylni to'g'ridan-to'g'ri diskdan o'qiydi (uzoq Selenium Grid emas).
+        // $filePath shu buyruq ishlayotgan PHP jarayoni o'qiy oladigan yo'l
+        // bo'lishi kerak (masalan storage/app/... ostidagi absolute yo'l).
+        // LocalFileDetector shu faylni shu yerdan o'qib, uni chromedriver/Chrome
+        // ishlayotgan tomonga (lokal bo'lsa — o'zi, uzoq Selenium Grid bo'lsa —
+        // grid node'ining o'ziga) avtomatik yuklab beradi, shuning uchun brauzer
+        // boshqa (masalan Docker konteyner ichidagi) fayl tizimida ishlayotgan
+        // bo'lsa ham fayl yuklash ishlayveradi.
+        $fileInput->setFileDetector(new LocalFileDetector());
         $fileInput->sendKeys($filePath);
     }
 
