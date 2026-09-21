@@ -104,6 +104,6 @@ Schedule::command('telegram:daily-status')
 |--------------------------------------------------------------------
 | scrape:zanjeer-operators har doim yangi token topishi uchun.
 */
-Schedule::command('crm:login')
-    ->hourly()
-    ->withoutOverlapping();
+//Schedule::command('crm:login')
+//    ->hourly()
+//    ->withoutOverlapping();
