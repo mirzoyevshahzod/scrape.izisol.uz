@@ -126,8 +126,9 @@ class QozoqWarehousePipelineCommand extends Command
     /**
      * Birlashtirilgan faylni Zanjeer CRM'dan operator nomi (scrape:zanjeer-operators)
      * va orginfo.uz'dan INN (excel:fill-inn) bilan to'ldirib, alohida yakuniy
-     * faylga saqlaydi. Bu bosqich hozircha hech qayerga avtomatik
-     * yuklamaydi — faqat storage/app/merge'da tayyor turadi.
+     * faylga saqlaydi. Yakuniy fayl storage/app/orginfo/malumotlar_{sana}.xlsx
+     * sifatida saqlanadi va `telegram:send-daily-files` buyrug'i orqali
+     * kunlik Telegram yuborishlarga qo'shiladi.
      *
      * Muvaffaqiyatsiz bo'lsa ham asosiy pipeline natijasiga (SUCCESS) ta'sir
      * qilmaydi — faqat log'ga yozib, ogohlantirish chiqaradi.
@@ -154,7 +155,13 @@ class QozoqWarehousePipelineCommand extends Command
 
             $this->info('INN qo\'shilmoqda (excel:fill-inn, orginfo.uz)...');
 
-            $finalOutput = storage_path('app/merge/final-' . now()->format('Y-m-d_H-i-s') . '.xlsx');
+            $orginfoDir = storage_path('app/orginfo');
+
+            if (!file_exists($orginfoDir)) {
+                mkdir($orginfoDir, 0777, true);
+            }
+
+            $finalOutput = $orginfoDir . '/malumotlar_' . now()->format('Y-m-d') . '.xlsx';
 
             Artisan::call('excel:fill-inn', [
                 'file' => $operatorsFile,
