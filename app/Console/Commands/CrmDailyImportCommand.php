@@ -24,7 +24,8 @@ class CrmDailyImportCommand extends Command
     protected $signature = 'crm:daily-import
                             {--email= : .env dagi CRM_LOGIN_EMAIL o\'rniga ishlatiladi}
                             {--password= : .env dagi CRM_LOGIN_PASSWORD o\'rniga ishlatiladi}
-                            {--timeout=60 : Har bir bosqich uchun kutish vaqti (soniya)}';
+                            {--timeout=60 : Har bir bosqich uchun kutish vaqti (soniya)}
+                            {--only= : Faqat shu bosqich(lar)ni ishga tushirish, vergul bilan ajratib (masalan: zitic,kazakhstan-russia). Bo\'sh bo\'lsa hammasi ishga tushadi}';
 
     protected $description = 'Qoldau/Turkey/Zitic/Declarant fayllarini formatlab, bitta CRM sessiyasida Zanjeer import qiladi';
 
@@ -48,6 +49,15 @@ class CrmDailyImportCommand extends Command
         $timeout = (int) $this->option('timeout');
         $session = null;
 
+        $allLabels = ['Kazakhstan - Russia', 'Turkey', 'Zitic', 'Declarant'];
+        $wantedLabels = $this->resolveOnlyLabels($allLabels, $this->option('only'));
+
+        if ($wantedLabels === []) {
+            $this->error("--only qiymati mos kelmadi. Mavjud bosqichlar: " . implode(', ', $allLabels));
+
+            return self::FAILURE;
+        }
+
         try {
             $this->info('chromedriver va brauzer tayyorlanmoqda...');
             $session = CrmSession::start($config);
@@ -61,12 +71,12 @@ class CrmDailyImportCommand extends Command
             return self::FAILURE;
         }
 
-        $pipelines = [
+        $pipelines = array_intersect_key([
             'Kazakhstan - Russia' => fn () => $this->importKazakhstanRussia($session, $config, $timeout),
             'Turkey' => fn () => $this->importTurkey($session, $config, $timeout),
             'Zitic' => fn () => $this->importZitic($session, $config, $timeout),
             'Declarant' => fn () => $this->importDeclarant($session, $config, $timeout),
-        ];
+        ], array_flip($wantedLabels));
 
         try {
             foreach ($pipelines as $label => $pipeline) {
@@ -89,6 +99,35 @@ class CrmDailyImportCommand extends Command
         $hasFailure = collect($this->results)->contains(fn ($r) => $r['status'] !== 'ok');
 
         return $hasFailure ? self::FAILURE : self::SUCCESS;
+    }
+
+    /**
+     * `--only=` orqali berilgan nomlarga mos bosqich nomlarini
+     * (asl `$allLabels`dan) qaytaradi (masalan
+     * `--only=zitic,kazakhstan-russia` faqat shu ikkitasini tanlaydi).
+     * Solishtirish kichik harfli, bo'sh joysiz shaklda bo'ladi —
+     * shuning uchun "zitic", "Zitic", "kazakhstan-russia" barchasi
+     * ishlaydi. `--only` berilmasa, barcha nomlar qaytadi. Hech biri
+     * mos kelmasa, bo'sh massiv qaytadi (chaqiruvchi shu holatni xato
+     * deb hisoblaydi).
+     *
+     * @param array<int,string> $allLabels
+     * @return array<int,string>
+     */
+    private function resolveOnlyLabels(array $allLabels, ?string $only): array
+    {
+        if (! $only) {
+            return $allLabels;
+        }
+
+        $normalize = fn ($name) => strtolower(str_replace(' ', '', trim($name)));
+
+        $wanted = array_map($normalize, explode(',', $only));
+
+        return array_values(array_filter(
+            $allLabels,
+            fn ($label) => in_array($normalize($label), $wanted, true)
+        ));
     }
 
     /**
