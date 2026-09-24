@@ -55,7 +55,7 @@ class SplitBorderExcelCommand extends Command
 
             $groups[$row[$borderIndex]][] = [
                 'car'  => $row[$carIndex],
-                'date' => $row[$dateIndex],
+                'date' => $this->normalizeDate((string) $row[$dateIndex]),
             ];
         }
 
@@ -124,5 +124,30 @@ class SplitBorderExcelCommand extends Command
        $this->info("ZIP created: {$zipPath}");
 
         return Command::SUCCESS;
+    }
+
+    /**
+     * Manba fayldagi "Sana va vaqt" ustuni oraliq shaklida keladi
+     * ("21.09.2026 00:00-01:00" — bitta aniq vaqt emas, balki oraliq).
+     * Bu format Zanjeer CRM'ga sana sifatida to'g'ri tanilmaydi (import
+     * kunini sana qilib, qatordagi raqamlarni vaqt sifatida noto'g'ri
+     * o'qib qo'yadi), shuning uchun oraliqning boshlanish vaqtini olib,
+     * to'liq "Y-m-d H:i:s" formatiga o'tkazamiz. Format mos kelmasa,
+     * asl matnni o'zgarishsiz qaytaradi (yo'qotmaslik uchun).
+     */
+    private function normalizeDate(string $raw): string
+    {
+        $raw = trim($raw);
+
+        if (preg_match('/^(\d{2}\.\d{2}\.\d{4})\s+(\d{2}:\d{2})/', $raw, $m)) {
+            try {
+                return Carbon::createFromFormat('d.m.Y H:i', $m[1] . ' ' . $m[2])
+                    ->format('Y-m-d H:i:s');
+            } catch (\Throwable $e) {
+                // pastga o'tib, asl matnni qaytaradi
+            }
+        }
+
+        return $raw;
     }
 }

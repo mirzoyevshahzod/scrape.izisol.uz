@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use Carbon\Carbon;
 use Illuminate\Console\Command;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
@@ -54,6 +55,19 @@ class ConvertZiticExcelCommand extends Command
 
                 if ($plate == '') {
                     continue;
+                }
+
+                // Manba (zitic.ru) faqat qisqa sanani beradi, vaqtsiz
+                // ("23.09.26"). Buni to'liq "Y-m-d H:i:s" formatiga
+                // o'tkazamiz — aks holda Zanjeer CRM bu qisqa formatni
+                // sana sifatida tanimay, import kunini sana qilib qo'yadi
+                // (va qatordagi raqamlarni vaqt sifatida noto'g'ri o'qiydi).
+                try {
+                    $date = Carbon::createFromFormat('d.m.y', $date)
+                        ->startOfDay()
+                        ->format('Y-m-d H:i:s');
+                } catch (\Throwable $e) {
+                    $date = null;
                 }
 
                 $newSheet->setCellValue('A' . $newRow, $plate);
