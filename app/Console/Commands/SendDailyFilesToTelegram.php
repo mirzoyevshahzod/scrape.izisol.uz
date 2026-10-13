@@ -32,7 +32,7 @@ class SendDailyFilesToTelegram extends Command
     {
         parent::__construct();
 
-        $mainChats = ['75714317', '7510409703'];
+        $mainChats = ['75714317', '7510409703', '8776207278'];
         $finalChats = ['7510409703', '6757738816'];
 
         $this->items = [
