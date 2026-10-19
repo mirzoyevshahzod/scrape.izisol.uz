@@ -13,6 +13,7 @@
         "laravel/tinker": "^2.10.1",
         "php-webdriver/webdriver": "^1.15",
         "phpoffice/phpspreadsheet": "^5.1",
+        "spatie/laravel-permission": "^8.3",
         "symfony/css-selector": "^7.3",
         "symfony/dom-crawler": "^7.3",
         "symfony/process": "^7.3"

@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\HomeController;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\EomborScrapeController;
@@ -11,46 +12,55 @@ use App\Http\Controllers\API\QozoqController;
 use App\Http\Controllers\ZiticController;
 use App\Http\Controllers\ZanjeerController;
 
-// Default index route
-Route::get('/', function () {
-    return view('index');
-})->name('home');
+Route::middleware('guest')->group(function () {
+    Route::get('/login', [LoginController::class, 'show'])->name('login');
+    Route::post('/login', [LoginController::class, 'login'])->middleware('throttle:5,1')->name('login.attempt');
+});
 
-// Eombor scraping routes
-Route::get('/scrape-eombor', [EomborScrapeController::class, 'index'])->name('scrape.eombor');
-Route::post('/scrape-eombor', [EomborScrapeController::class, 'scrape'])->name('scrape.eombor.process');
+Route::post('/logout', [LoginController::class, 'logout'])->middleware('auth')->name('logout');
 
-//Mintrans license
-Route::get('/mintrans-litsenziya', [HomeController::class, 'mintrans'])->name('index');
-//Mintrans Avtoraqam
-Route::get('/mintrans-auto', [HomeController::class, 'mintransAuto'])->name('upload.index');
-//Belarus scraping
-Route::get('/belarus', [HomeController::class, 'belarus'])->name('scrape.data');
-//Qozoq scraping
-Route::get('/qozoq', [QozoqController::class, 'index'])->name('qozoq.index');
-Route::get('/check-qozoq', [HomeController::class, 'checkQozoq'])->name('check.qozoq');
-//Zitic scraping
-Route::get('/zitic', [HomeController::class, 'zitic'])->name('zitic.index');
+Route::middleware('auth')->group(function () {
+    // Default index route
+    Route::get('/', function () {
+        return view('index');
+    })->name('home');
 
-//Orginfo scraping
-Route::get('/orginfo', [HomeController::class, 'orginfo'])->name('orginfo.index');
+    // Eombor scraping routes
+    Route::get('/scrape-eombor', [EomborScrapeController::class, 'index'])->name('scrape.eombor');
+    Route::post('/scrape-eombor', [EomborScrapeController::class, 'scrape'])->name('scrape.eombor.process');
 
-//Zanjeer scraping
-Route::get('/zanjeer', [HomeController::class, 'scrapeZanjeer'])->name('zanjeer.index');
-// turkey scraper routes
-Route::get('/turkey', [HomeController::class, 'turkey'])->name('turkey.index');
-Route::get('/autos', [HomeController::class, 'autos'])->name('autos.index');
+    //Mintrans license
+    Route::get('/mintrans-litsenziya', [HomeController::class, 'mintrans'])->name('index');
+    //Mintrans Avtoraqam
+    Route::get('/mintrans-auto', [HomeController::class, 'mintransAuto'])->name('upload.index');
+    //Belarus scraping
+    Route::get('/belarus', [HomeController::class, 'belarus'])->name('scrape.data');
+    //Qozoq scraping
+    Route::get('/qozoq', [QozoqController::class, 'index'])->name('qozoq.index');
+    Route::get('/check-qozoq', [HomeController::class, 'checkQozoq'])->name('check.qozoq');
+    //Zitic scraping
+    Route::get('/zitic', [HomeController::class, 'zitic'])->name('zitic.index');
 
-Route::get('/upload-zanjeer-file', [HomeController::class, 'uploadZanjeer'])->name('upload-zanjeer');
+    //Orginfo scraping
+    Route::get('/orginfo', [HomeController::class, 'orginfo'])->name('orginfo.index');
 
-Route::get('/e-ombor-converter', [HomeController::class, 'eOmborConverter'])->name('eOmborConverter');
+    //Zanjeer scraping
+    Route::get('/zanjeer', [HomeController::class, 'scrapeZanjeer'])->name('zanjeer.index');
+    // turkey scraper routes
+    Route::get('/turkey', [HomeController::class, 'turkey'])->name('turkey.index');
+    Route::get('/autos', [HomeController::class, 'autos'])->name('autos.index');
 
-Route::get('/turkiya-converter', [HomeController::class, 'turkiyaConverter'])->name('turkiyaConverter');
+    Route::get('/upload-zanjeer-file', [HomeController::class, 'uploadZanjeer'])->name('upload-zanjeer');
 
-Route::get('/zitic-converter', [HomeController::class, 'ziticConverter'])->name('ziticConverter');
+    Route::get('/e-ombor-converter', [HomeController::class, 'eOmborConverter'])->name('eOmborConverter');
 
-Route::get('/declarant-converter', [HomeController::class, 'declarantConverter'])->name('declarantConverter');
+    Route::get('/turkiya-converter', [HomeController::class, 'turkiyaConverter'])->name('turkiyaConverter');
 
-Route::get('/filter-uzbek-car-number', [HomeController::class, 'filterUzbekCarNumber'])->name('filterUzbekCarNumber');
+    Route::get('/zitic-converter', [HomeController::class, 'ziticConverter'])->name('ziticConverter');
 
-Route::get('/merge-excel-files', [HomeController::class, 'mergeExcelFiles'])->name('mergeExcelFiles');
+    Route::get('/declarant-converter', [HomeController::class, 'declarantConverter'])->name('declarantConverter');
+
+    Route::get('/filter-uzbek-car-number', [HomeController::class, 'filterUzbekCarNumber'])->name('filterUzbekCarNumber');
+
+    Route::get('/merge-excel-files', [HomeController::class, 'mergeExcelFiles'])->name('mergeExcelFiles');
+});
