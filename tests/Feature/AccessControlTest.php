@@ -22,7 +22,8 @@ class AccessControlTest extends TestCase
         $this->seed(PermissionSeeder::class);
 
         Role::create(['name' => 'super_admin', 'guard_name' => 'web']);
-        $this->superAdmin = User::factory()->create(['email' => 'super@test.uz']);
+        // ism aniq berilgan: Faker tasodifiy ismi (masalan "Natalia") "?q=ali" qidiruviga tushib qolmasin
+        $this->superAdmin = User::factory()->create(['name' => 'Super Admin', 'email' => 'super@test.uz']);
         $this->superAdmin->assignRole('super_admin');
     }
 
