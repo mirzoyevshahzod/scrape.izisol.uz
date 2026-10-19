@@ -48,7 +48,7 @@ class SendDailyFilesToTelegram extends Command
             ['label' => 'Declarant (Benyakoni)', 'dir' => storage_path('app/declarant'), 'pattern' => 'benyakoni-*.xlsx', 'chats' => $mainChats, 'enrich' => true],
             ['label' => 'Declarant (Kamennii Log)', 'dir' => storage_path('app/declarant'), 'pattern' => 'kamennii-log-*.xlsx', 'chats' => $mainChats, 'enrich' => true],
             ['label' => 'Kazakhstan-China', 'dir' => storage_path('app/qozoq'), 'pattern' => 'kazakhstan-china-*.xlsx', 'chats' => $mainChats, 'enrich' => true],
-            ['label' => 'Qozoq tekshirilgan', 'dir' => storage_path('app/import_qozoq'), 'pattern' => 'qozoq_*_tekshirilgan.xlsx', 'chats' => $mainChats],
+            ['label' => 'Qozoq tekshirilgan', 'dir' => storage_path('app/import_qozoq'), 'pattern' => 'qozoq_*_tekshirilgan.xlsx', 'chats' => $mainChats, 'enrich' => true],
             ['label' => 'Yakuniy (merge + operator + INN)', 'dir' => storage_path('app/orginfo'), 'pattern' => 'malumotlar_*.xlsx', 'chats' => $finalChats],
         ];
     }
