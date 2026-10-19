@@ -1,269 +1,93 @@
-<!DOCTYPE html>
-<html lang="uz">
-<head>
-    <meta charset="UTF-8">
-    @include('partials.auth-head')
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Scraping Loyihalar Dashboard</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    <style>
-        body {
-            background-color: #f8f9fa;
-        }
-        .sidebar {
-            min-height: 100vh;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            box-shadow: 2px 0 5px rgba(0,0,0,0.1);
-        }
-        .sidebar .nav-link {
-            color: rgba(255,255,255,0.8);
-            padding: 15px 20px;
-            margin: 5px 10px;
-            border-radius: 10px;
-            transition: all 0.3s ease;
-            border: 2px solid transparent;
-        }
-        .sidebar .nav-link:hover {
-            background-color: rgba(255,255,255,0.1);
-            color: white;
-            transform: translateX(5px);
-        }
-        .sidebar .nav-link.active {
-            background-color: rgba(255,255,255,0.2);
-            color: white;
-            border-color: rgba(255,255,255,0.3);
-        }
-        .main-content {
-            padding: 30px;
-        }
-        .page-card {
-            background: white;
-            border-radius: 15px;
-            padding: 40px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
-            min-height: 400px;
-        }
-        .default-page-card {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            flex-direction: column;
-        }
-        .page-title {
-            font-size: 3rem;
-            font-weight: bold;
-            color: #667eea;
-            margin-bottom: 20px;
-        }
-        .page-subtitle {
-            font-size: 1.2rem;
-            color: #6c757d;
-            text-align: center;
-        }
-        .header-title {
-            color: #495057;
-            font-weight: 600;
-            margin-bottom: 30px;
-        }
-        .sidebar-title {
-            color: white;
-            font-size: 1.5rem;
-            font-weight: bold;
-            padding: 20px;
-            text-align: center;
-            border-bottom: 1px solid rgba(255,255,255,0.2);
-            margin-bottom: 20px;
-        }
-        .form-control:focus, .form-select:focus {
-            border-color: #667eea;
-            box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
-        }
-        .btn-primary {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            border: none;
-        }
-        .btn-primary:hover {
-            background: linear-gradient(135deg, #5a6fd8 0%, #6a4190 100%);
-            transform: translateY(-2px);
-        }
-        .alert {
-            border-radius: 10px;
-            border: none;
-        }
-        .card {
-            border: none;
-            border-radius: 15px;
-        }
-        .card-header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border-radius: 15px 15px 0 0 !important;
-            border: none;
-        }
-        .info-card {
-            background: linear-gradient(135deg, #e3f2fd 0%, #f3e5f5 100%);
-            border: 1px solid rgba(102, 126, 234, 0.1);
-        }
-    </style>
-</head>
-<body>
-    <div class="container-fluid">
-        <div class="row">
-            <!-- Sidebar -->
-            <div class="col-md-3 col-lg-2 px-0">
-                <div class="sidebar">
-                    <div class="sidebar-title">
-                        <i class="fas fa-spider me-2"></i>
-                        Scraping Loyihalar
-                    </div>
-                    <nav class="nav flex-column">
-                         @can('page.autos')
-                         <a class="nav-link" href="/autos" target="_blank" id="nav-page4">
-                            <i class="fas fa-globe-europe me-2"></i>
-                            Autos
-                        </a>
-                         @endcan
-                         @can('page.mintrans-auto')
-                         <a class="nav-link" href="/mintrans-auto" target="_blank" id="nav-page3">
-                            <i class="fas fa-search me-2"></i>
-                            Mintrans Avtoraqam
-                        </a>
-                         @endcan
-                           @can('page.qozoq')
-                           <a class="nav-link" href="/qozoq" target="_blank" id="nav-page6">
-                            <i class="fas fa-file-alt me-2"></i>
-                            Qozoq Scraper
-                        </a>
-                           @endcan
-                        @can('page.check-qozoq')
-                        <a class="nav-link" href="/check-qozoq" target="_blank" id="nav-page6">
-                            <i class="fas fa-file-alt me-2"></i>
-                            Qozoq Tekshirilgan
-                        </a>
-                        @endcan
-                        @can('page.belarus')
-                        <a class="nav-link" href="/belarus" target="_blank" id="nav-page4">
-                            <i class="fas fa-globe-europe me-2"></i>
-                            Belarus Litva
-                        </a>
-                        @endcan
-                        @can('page.turkey')
-                        <a class="nav-link" href="/turkey" target="_blank" id="nav-page5">
-                            <i class="fas fa-flag me-2"></i>
-                            Turkiya Gruziya
-                        </a>
-                        @endcan
-                        @can('page.zitic')
-                        <a class="nav-link" href="/zitic" target="_blank" id="nav-page7">
-                            <i class="fas fa-download me-2"></i>
-                            Zitic Scraper
-                        </a>
-                        @endcan
-                        @can('page.zanjeer')
-                        <a class="nav-link" href="/zanjeer" target="_blank" id="nav-page4">
-                            <i class="fas fa-globe-europe me-2"></i>
-                            Zanjeer Scraper
-                        </a>
-                        @endcan
-                        @can('page.orginfo')
-                        <a class="nav-link" href="/orginfo" target="_blank" id="nav-page7">
-                            <i class="fas fa-download me-2"></i>
-                            Orginfo Scraper
-                        </a>
-                        @endcan
-                        @can('page.upload-zanjeer')
-                        <a class="nav-link" href="{{ route('upload-zanjeer') }}" target="_blank" id="nav-page7">
-                            <i class="fas fa-download me-2"></i>
-                            Qozoq Tekshirilgan Converter
-                        </a>
-                        @endcan
-                        @can('page.eombor-converter')
-                        <a class="nav-link" href="{{ route('eOmborConverter') }}" target="_blank" id="nav-page7">
-                            <i class="fas fa-download me-2"></i>
-                            E Ombor Converter
-                        </a>
-                        @endcan
-                        @can('page.turkiya-converter')
-                        <a class="nav-link" href="{{ route('turkiyaConverter') }}" target="_blank" id="nav-page7">
-                            <i class="fas fa-download me-2"></i>
-                            Turkiya Converter
-                        </a>
-                        @endcan
-                        @can('page.zitic-converter')
-                        <a class="nav-link" href="{{ route('ziticConverter') }}" target="_blank" id="nav-page7">
-                            <i class="fas fa-download me-2"></i>
-                            Zitic Converter
-                        </a>
-                        @endcan
-                        @can('page.declarant-converter')
-                        <a class="nav-link" href="{{ route('declarantConverter') }}" target="_blank" id="nav-page7">
-                            <i class="fas fa-download me-2"></i>
-                            Declarant Converter
-                        </a>
-                        @endcan
-                        @can('page.uzbek-plates')
-                        <a class="nav-link" href="{{ route('filterUzbekCarNumber') }}" target="_blank" id="nav-page7">
-                            <i class="fas fa-download me-2"></i>
-                            Uzbek Car Number Filter
-                        </a>
-                        @endcan
-                        @can('page.merge-excel')
-                        <a class="nav-link" href="{{ route('mergeExcelFiles') }}" target="_blank" id="nav-page7">
-                            <i class="fas fa-object-group me-2"></i>
-                            Excel Fayllarni Birlashtirish
-                        </a>
-                        @endcan
-                        @canany(['operation.crm-login', 'operation.pipeline', 'operation.telegram', 'operation.scraping', 'admin.users', 'admin.roles'])
-                            <hr class="mx-3 my-2" style="border-color: rgba(255,255,255,0.3);">
-                        @endcanany
-                        @canany(['operation.crm-login', 'operation.pipeline', 'operation.telegram', 'operation.scraping'])
-                            <a class="nav-link" href="{{ route('operations.index') }}">
-                                <i class="fas fa-sliders-h me-2"></i>
-                                Boshqaruv
-                            </a>
-                        @endcanany
-                        @can('admin.users')
-                            <a class="nav-link" href="{{ route('admin.users.index') }}">
-                                <i class="fas fa-users me-2"></i>
-                                Foydalanuvchilar
-                            </a>
-                        @endcan
-                        @can('admin.roles')
-                            <a class="nav-link" href="{{ route('admin.roles.index') }}">
-                                <i class="fas fa-user-shield me-2"></i>
-                                Rollar
-                            </a>
-                        @endcan
-                    </nav>
-                </div>
-            </div>
+@extends('layouts.app')
 
-            <!-- Main Content -->
-            <div class="col-md-9 col-lg-10">
-                <div class="main-content">
-                    <h1 class="header-title">
-                        <i class="fas fa-home me-2"></i>
-                        Scraping Loyihalar Dashboard
-                    </h1>
+@section('title', 'Bosh sahifa')
 
-                    <!-- Default Content -->
-                    <div id="default-content" class="page-card default-page-card">
-                        <div class="text-center">
-                            <i class="fas fa-rocket" style="font-size: 4rem; color: #667eea; margin-bottom: 20px;"></i>
-                            <h2 class="page-title">Xush kelibsiz!</h2>
-                            <p class="page-subtitle">
-                                Chap tarafdan scraping loyihasini tanlang va ishni boshlang.
-                                <br>
-                                Barcha scraping loyihalar bitta joyda jamlangan.
-                            </p>
-                        </div>
-                    </div>
-                </div>
-            </div>
+@php
+    $statusBadge = [
+        'queued' => ['bg-secondary-subtle text-secondary-emphasis', 'Navbatda'],
+        'running' => ['bg-primary-subtle text-primary-emphasis', 'Ishlayapti'],
+        'success' => ['bg-success-subtle text-success-emphasis', 'Muvaffaqiyatli'],
+        'failed' => ['bg-danger-subtle text-danger-emphasis', 'Xato'],
+    ];
+@endphp
+
+@section('content')
+    <div class="page-header">
+        <div>
+            <h1>Xush kelibsiz, {{ auth()->user()->name }}</h1>
+            <p>{{ now()->translatedFormat('j F Y') }} · Kerakli bo'limni tanlang</p>
         </div>
+        @if ($operations)
+            <a href="{{ route('operations.index') }}" class="btn btn-primary">
+                <i class="fas fa-sliders me-1"></i>Boshqaruv
+            </a>
+        @endif
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-</body>
-</html>
+    @if ($operations)
+        <div class="card mb-2">
+            <div class="card-header d-flex align-items-center justify-content-between">
+                <span><i class="fas fa-clock-rotate-left me-2 text-muted"></i>So'nggi amallar</span>
+                <a href="{{ route('operations.index') }}" class="small text-decoration-none">Barchasi</a>
+            </div>
+            @if ($recentRuns->isEmpty())
+                <div class="empty-state py-4">
+                    <div><i class="fas fa-inbox"></i></div>
+                    Hali hech narsa ishga tushirilmagan.
+                </div>
+            @else
+                <div class="table-responsive">
+                    <table class="table align-middle">
+                        <thead>
+                            <tr>
+                                <th>Amal</th>
+                                <th>Holat</th>
+                                <th class="d-none d-md-table-cell">Kim</th>
+                                <th>Vaqt</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach ($recentRuns as $run)
+                                @php [$class, $label] = $statusBadge[$run->status] ?? ['bg-secondary-subtle text-secondary-emphasis', $run->status]; @endphp
+                                <tr>
+                                    <td class="fw-medium">{{ config("operations.operations.{$run->operation}.label", $run->operation) }}</td>
+                                    <td><span class="badge {{ $class }}">{{ $label }}</span></td>
+                                    <td class="text-muted d-none d-md-table-cell">{{ $run->user?->name ?? 'jadval' }}</td>
+                                    <td class="text-muted small">{{ ($run->finished_at ?? $run->started_at ?? $run->created_at)->diffForHumans() }}</td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+            @endif
+        </div>
+    @endif
+
+    @forelse ($sections as $section)
+        <div class="section-title">{{ $section['title'] }}</div>
+        <div class="row g-3">
+            @foreach ($section['items'] as $item)
+                <div class="col-xl-3 col-lg-4 col-sm-6">
+                    <a href="{{ $item['url'] }}" class="link-card">
+                        <span class="icon-tile"><i class="fas {{ $item['icon'] }}"></i></span>
+                        <span>
+                            <span class="title d-block">{{ $item['label'] }}</span>
+                            @if (! empty($item['description']))
+                                <span class="desc d-block">{{ $item['description'] }}</span>
+                            @endif
+                        </span>
+                    </a>
+                </div>
+            @endforeach
+        </div>
+    @empty
+        @unless ($operations)
+            <div class="card">
+                <div class="empty-state">
+                    <div><i class="fas fa-lock"></i></div>
+                    Sizga hali hech qanday bo'lim ochilmagan. Administratorga murojaat qiling.
+                </div>
+            </div>
+        @endunless
+    @endforelse
+@endsection

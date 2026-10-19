@@ -89,7 +89,8 @@ class AccessControlTest extends TestCase
     {
         $this->actingAs($this->userWith(['page.zitic']));
 
-        $this->get('/')->assertOk()->assertSee('href="/zitic"', false)->assertDontSee('href="/belarus"', false)
+        $this->get('/')->assertOk()->assertSee('href="' . route('zitic.index') . '"', false)
+            ->assertDontSee('href="' . route('scrape.data') . '"', false)
             ->assertDontSee('Foydalanuvchilar');
     }
 
@@ -168,7 +169,8 @@ class AccessControlTest extends TestCase
 
         $ali = User::where('email', 'ali@test.uz')->firstOrFail();
         $this->get("/admin/users/{$ali->id}/edit")->assertOk()->assertSee('ali@test.uz');
-        $this->get('/admin/users?q=ali')->assertOk()->assertSee('ali@test.uz')->assertDontSee('super@test.uz');
+        $this->get('/admin/users?q=ali')->assertOk()
+            ->assertViewHas('users', fn ($users) => $users->pluck('email')->all() === ['ali@test.uz']);
         $this->assertTrue($ali->hasRole('operator'));
         $this->assertTrue($ali->can('page.zitic'));
 

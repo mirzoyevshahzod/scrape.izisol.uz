@@ -1,41 +1,17 @@
-@extends('layouts.admin')
+@extends('layouts.app')
 
 @section('title', 'Boshqaruv')
 
-@push('styles')
-    <style>
-        .op-card .op-icon {
-            width: 48px;
-            height: 48px;
-            border-radius: 12px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            font-size: 20px;
-        }
-        .op-output {
-            background: #1e1e2e;
-            color: #e0e0e0;
-            border-radius: 10px;
-            padding: 16px;
-            max-height: 60vh;
-            overflow: auto;
-            font-size: 12.5px;
-            white-space: pre-wrap;
-            word-break: break-word;
-        }
-    </style>
-@endpush
 
 @section('content')
-    <div class="mb-4">
-        <h3 class="mb-1"><i class="fas fa-sliders-h me-2"></i>Boshqaruv</h3>
-        <p class="text-muted mb-0">
-            Amallar fonda (queue orqali) bajariladi — sahifani yopib qo'ysangiz ham davom etadi.
-            Bir xil amal bir vaqtda faqat bir marta ishlaydi.
-        </p>
+    <div class="page-header">
+        <div>
+            <h1>Boshqaruv</h1>
+            <p>
+                Amallar fonda (queue orqali) bajariladi — sahifani yopib qo'ysangiz ham davom etadi.
+                Bir xil amal bir vaqtda faqat bir marta ishlaydi.
+            </p>
+        </div>
     </div>
 
     <div id="worker-warning" class="alert alert-warning d-none">
@@ -46,15 +22,15 @@
     <div class="row g-4 mb-4">
         @foreach ($operations as $key => $operation)
             <div class="col-xl-3 col-md-6">
-                <div class="card page-card op-card h-100" data-operation="{{ $key }}">
-                    <div class="card-body p-4 d-flex flex-column">
+                <div class="card h-100" data-operation="{{ $key }}">
+                    <div class="card-body d-flex flex-column">
                         <div class="d-flex align-items-center gap-3 mb-3">
-                            <div class="op-icon"><i class="fas {{ $operation['icon'] }}"></i></div>
-                            <h5 class="mb-0">{{ $operation['label'] }}</h5>
+                            <span class="icon-tile"><i class="fas {{ $operation['icon'] }}"></i></span>
+                            <h5 class="mb-0 fs-6 fw-semibold">{{ $operation['label'] }}</h5>
                         </div>
                         <p class="text-muted small flex-grow-1">{{ $operation['description'] }}</p>
                         <div class="small mb-3 op-last text-muted">Hali ishga tushirilmagan.</div>
-                        <button type="button" class="btn btn-gradient w-100 op-run" data-label="{{ $operation['label'] }}">
+                        <button type="button" class="btn btn-primary w-100 op-run" data-label="{{ $operation['label'] }}">
                             <i class="fas fa-play me-1"></i>Ishga tushirish
                         </button>
                     </div>
@@ -63,9 +39,9 @@
         @endforeach
     </div>
 
-    <div class="card page-card">
-        <div class="card-body">
-            <h5 class="mb-3">So'nggi ishlar</h5>
+    <div class="card">
+        <div class="card-header"><i class="fas fa-clock-rotate-left me-2 text-muted"></i>So'nggi ishlar</div>
+        <div>
             <div class="table-responsive">
                 <table class="table table-hover align-middle mb-0">
                     <thead>
@@ -73,8 +49,8 @@
                             <th>#</th>
                             <th>Amal</th>
                             <th>Holat</th>
-                            <th>Kim</th>
-                            <th>Boshlangan</th>
+                            <th class="d-none d-md-table-cell">Kim</th>
+                            <th class="d-none d-sm-table-cell">Boshlangan</th>
                             <th>Davomiyligi</th>
                             <th></th>
                         </tr>
@@ -95,7 +71,7 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
-                    <pre class="op-output mb-0" id="output-body"></pre>
+                    <pre class="console-output mb-0" id="output-body"></pre>
                 </div>
             </div>
         </div>
@@ -112,11 +88,11 @@
             };
 
             const STATUS = {
-                queued: ['bg-secondary', 'Navbatda'],
-                running: ['bg-primary', 'Ishlayapti'],
-                success: ['bg-success', 'Muvaffaqiyatli'],
-                failed: ['bg-danger', 'Xato'],
-                stale: ['bg-warning text-dark', 'Tiqilib qolgan'],
+                queued: ['bg-secondary-subtle text-secondary-emphasis', 'Navbatda'],
+                running: ['bg-primary-subtle text-primary-emphasis', 'Ishlayapti'],
+                success: ['bg-success-subtle text-success-emphasis', 'Muvaffaqiyatli'],
+                failed: ['bg-danger-subtle text-danger-emphasis', 'Xato'],
+                stale: ['bg-warning-subtle text-warning-emphasis', 'Tiqilib qolgan'],
             };
 
             const modal = new bootstrap.Modal(document.getElementById('output-modal'));
@@ -131,7 +107,7 @@
             }
 
             function badge(status) {
-                const [cls, label] = STATUS[status] || ['bg-secondary', status];
+                const [cls, label] = STATUS[status] || ['bg-secondary-subtle text-secondary-emphasis', status];
                 const node = el('span', 'badge ' + cls, label);
                 if (status === 'running') {
                     node.prepend(el('span', 'spinner-border spinner-border-sm me-1'));
@@ -185,7 +161,7 @@
                     statusCell.append(badge(run.status));
 
                     const actions = el('td', 'text-end');
-                    const button = el('button', 'btn btn-sm btn-outline-secondary', 'Natija');
+                    const button = el('button', 'btn btn-sm btn-light', 'Natija');
                     button.type = 'button';
                     button.addEventListener('click', function () { openOutput(run.id, run.label); });
                     actions.append(button);
@@ -194,8 +170,8 @@
                         el('td', 'text-muted', run.id),
                         el('td', null, run.label),
                         statusCell,
-                        el('td', null, run.user || 'jadval'),
-                        el('td', 'text-muted small', run.started_at || run.created_at),
+                        el('td', 'd-none d-md-table-cell', run.user || 'jadval'),
+                        el('td', 'text-muted small d-none d-sm-table-cell', run.started_at || run.created_at),
                         el('td', 'text-muted small', duration(run.duration)),
                         actions
                     );

@@ -1,0 +1,563 @@
+/*
+ * Scraping Dashboard — umumiy dizayn tizimi (layouts/app).
+ *
+ * Bootstrap 5.3 ustiga quriladi: ranglar CSS o'zgaruvchilari orqali
+ * beriladi va [data-bs-theme="dark"] uchun qayta belgilanadi, shuning
+ * uchun Bootstrap komponentlari (card, table, form, badge...) ikkala
+ * mavzuda ham avtomatik to'g'ri ko'rinadi.
+ */
+
+/* ---------- Tokenlar ---------- */
+:root,
+[data-bs-theme="light"] {
+    --ui-primary: #6d5efc;
+    --ui-primary-rgb: 109, 94, 252;
+    --ui-primary-hover: #5b4be6;
+    --ui-primary-soft: rgba(109, 94, 252, 0.10);
+    --ui-bg: #f7f7f9;
+    --ui-surface: #ffffff;
+    --ui-surface-2: #f2f2f5;
+    --ui-border: #e6e6eb;
+    --ui-text: #18181b;
+    --ui-muted: #6b6b76;
+    --ui-sidebar-bg: #fbfbfc;
+    --ui-shadow: 0 1px 2px rgba(16, 16, 24, 0.04), 0 1px 3px rgba(16, 16, 24, 0.06);
+    --ui-shadow-lg: 0 10px 30px rgba(16, 16, 24, 0.08);
+    --ui-radius: 12px;
+    --ui-sidebar-width: 264px;
+    --ui-topbar-height: 60px;
+}
+
+[data-bs-theme="dark"] {
+    --ui-primary: #8b7dff;
+    --ui-primary-rgb: 139, 125, 255;
+    --ui-primary-hover: #a092ff;
+    --ui-primary-soft: rgba(139, 125, 255, 0.14);
+    --ui-bg: #0e0e11;
+    --ui-surface: #17171c;
+    --ui-surface-2: #1f1f26;
+    --ui-border: #2a2a33;
+    --ui-text: #ececf1;
+    --ui-muted: #9a9aa6;
+    --ui-sidebar-bg: #121216;
+    --ui-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --ui-shadow-lg: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+
+/* Bootstrap o'zgaruvchilarini tokenlarga bog'lash */
+:root,
+[data-bs-theme="light"],
+[data-bs-theme="dark"] {
+    --bs-primary: var(--ui-primary);
+    --bs-primary-rgb: var(--ui-primary-rgb);
+    --bs-primary-bg-subtle: var(--ui-primary-soft);
+    --bs-primary-text-emphasis: var(--ui-primary);
+    --bs-primary-border-subtle: rgba(var(--ui-primary-rgb), 0.3);
+    --bs-link-color: var(--ui-primary);
+    --bs-link-color-rgb: var(--ui-primary-rgb);
+    --bs-link-hover-color: var(--ui-primary-hover);
+    --bs-body-bg: var(--ui-bg);
+    --bs-body-color: var(--ui-text);
+    --bs-secondary-color: var(--ui-muted);
+    --bs-tertiary-bg: var(--ui-surface-2);
+    --bs-border-color: var(--ui-border);
+    --bs-border-radius: 8px;
+    --bs-border-radius-lg: var(--ui-radius);
+    --bs-body-font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --bs-body-font-size: 0.9375rem;
+    --bs-focus-ring-color: rgba(var(--ui-primary-rgb), 0.25);
+}
+
+body {
+    background: var(--ui-bg);
+    color: var(--ui-text);
+    -webkit-font-smoothing: antialiased;
+}
+
+/* ---------- Layout ---------- */
+.app-shell {
+    display: flex;
+    min-height: 100vh;
+}
+
+.app-sidebar {
+    width: var(--ui-sidebar-width);
+    flex-shrink: 0;
+    background: var(--ui-sidebar-bg);
+    border-right: 1px solid var(--ui-border);
+}
+
+@media (min-width: 992px) {
+    .app-sidebar {
+        position: sticky;
+        top: 0;
+        height: 100vh;
+    }
+}
+
+.app-sidebar .offcanvas-body {
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+    overflow-y: auto;
+}
+
+.sidebar-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    height: var(--ui-topbar-height);
+    padding: 0 20px;
+    font-weight: 700;
+    font-size: 1rem;
+    color: var(--ui-text);
+    text-decoration: none;
+    border-bottom: 1px solid var(--ui-border);
+    flex-shrink: 0;
+}
+
+.sidebar-brand:hover {
+    color: var(--ui-text);
+}
+
+.brand-mark {
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+    display: grid;
+    place-items: center;
+    background: var(--ui-primary);
+    color: #fff;
+    font-size: 14px;
+}
+
+.sidebar-nav {
+    padding: 12px 12px 24px;
+}
+
+.nav-section {
+    padding: 16px 10px 6px;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ui-muted);
+}
+
+.nav-item-ui {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 10px;
+    margin: 1px 0;
+    border-radius: 8px;
+    color: var(--ui-muted);
+    font-size: 0.875rem;
+    font-weight: 500;
+    text-decoration: none;
+    transition: background-color 0.15s, color 0.15s;
+}
+
+.nav-item-ui i {
+    width: 18px;
+    text-align: center;
+    font-size: 0.875rem;
+}
+
+.nav-item-ui:hover {
+    background: var(--ui-surface-2);
+    color: var(--ui-text);
+}
+
+.nav-item-ui.active {
+    background: var(--ui-primary-soft);
+    color: var(--ui-primary);
+}
+
+.app-main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.app-topbar {
+    position: sticky;
+    top: 0;
+    z-index: 1020;
+    height: var(--ui-topbar-height);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 0 24px;
+    background: color-mix(in srgb, var(--ui-bg) 85%, transparent);
+    backdrop-filter: saturate(180%) blur(10px);
+    border-bottom: 1px solid var(--ui-border);
+}
+
+.topbar-title {
+    font-size: 0.9375rem;
+    font-weight: 600;
+    margin: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.icon-btn {
+    width: 36px;
+    height: 36px;
+    display: inline-grid;
+    place-items: center;
+    border: 1px solid var(--ui-border);
+    border-radius: 8px;
+    background: var(--ui-surface);
+    color: var(--ui-muted);
+    transition: color 0.15s, border-color 0.15s;
+}
+
+.icon-btn:hover {
+    color: var(--ui-text);
+    border-color: var(--ui-muted);
+}
+
+.user-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 10px 4px 4px;
+    border: 1px solid var(--ui-border);
+    border-radius: 999px;
+    background: var(--ui-surface);
+    color: var(--ui-text);
+    font-size: 0.875rem;
+}
+
+.avatar {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    background: var(--ui-primary-soft);
+    color: var(--ui-primary);
+    font-weight: 600;
+    font-size: 0.75rem;
+    flex-shrink: 0;
+}
+
+.app-content {
+    width: 100%;
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 28px 24px 48px;
+}
+
+@media (max-width: 575.98px) {
+    .app-topbar { padding: 0 16px; }
+    .app-content { padding: 20px 16px 40px; }
+}
+
+/* ---------- Sahifa sarlavhasi ---------- */
+.page-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 24px;
+}
+
+.page-header h1 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    margin: 0;
+}
+
+.page-header p {
+    color: var(--ui-muted);
+    margin: 4px 0 0;
+}
+
+/* ---------- Komponentlar ---------- */
+.card {
+    --bs-card-bg: var(--ui-surface);
+    --bs-card-border-color: var(--ui-border);
+    --bs-card-border-radius: var(--ui-radius);
+    --bs-card-cap-bg: transparent;
+    box-shadow: var(--ui-shadow);
+}
+
+.card-header {
+    padding: 14px 20px;
+    font-weight: 600;
+    border-bottom-color: var(--ui-border);
+}
+
+.card-body {
+    padding: 20px;
+}
+
+.btn {
+    --bs-btn-font-weight: 500;
+    --bs-btn-font-size: 0.875rem;
+    --bs-btn-padding-y: 0.45rem;
+    --bs-btn-padding-x: 0.9rem;
+    --bs-btn-border-radius: 8px;
+}
+
+.btn-primary {
+    --bs-btn-bg: var(--ui-primary);
+    --bs-btn-border-color: var(--ui-primary);
+    --bs-btn-hover-bg: var(--ui-primary-hover);
+    --bs-btn-hover-border-color: var(--ui-primary-hover);
+    --bs-btn-active-bg: var(--ui-primary-hover);
+    --bs-btn-active-border-color: var(--ui-primary-hover);
+    --bs-btn-disabled-bg: var(--ui-primary);
+    --bs-btn-disabled-border-color: var(--ui-primary);
+    --bs-btn-focus-shadow-rgb: var(--ui-primary-rgb);
+}
+
+.btn-outline-primary {
+    --bs-btn-color: var(--ui-primary);
+    --bs-btn-border-color: rgba(var(--ui-primary-rgb), 0.5);
+    --bs-btn-hover-bg: var(--ui-primary);
+    --bs-btn-hover-border-color: var(--ui-primary);
+    --bs-btn-active-bg: var(--ui-primary);
+    --bs-btn-active-border-color: var(--ui-primary);
+    --bs-btn-disabled-color: var(--ui-primary);
+    --bs-btn-focus-shadow-rgb: var(--ui-primary-rgb);
+}
+
+.btn-light {
+    --bs-btn-bg: var(--ui-surface);
+    --bs-btn-border-color: var(--ui-border);
+    --bs-btn-color: var(--ui-text);
+    --bs-btn-hover-bg: var(--ui-surface-2);
+    --bs-btn-hover-border-color: var(--ui-border);
+    --bs-btn-hover-color: var(--ui-text);
+}
+
+.form-control,
+.form-select {
+    background-color: var(--ui-surface);
+    border-color: var(--ui-border);
+    border-radius: 8px;
+    font-size: 0.9rem;
+}
+
+.form-control:focus,
+.form-select:focus,
+.form-check-input:focus {
+    border-color: rgba(var(--ui-primary-rgb), 0.6);
+    box-shadow: 0 0 0 3px rgba(var(--ui-primary-rgb), 0.18);
+}
+
+.form-check-input:checked {
+    background-color: var(--ui-primary);
+    border-color: var(--ui-primary);
+}
+
+.form-label {
+    font-weight: 500;
+    font-size: 0.875rem;
+}
+
+.table {
+    --bs-table-bg: transparent;
+    --bs-table-hover-bg: var(--ui-surface-2);
+    --bs-table-border-color: var(--ui-border);
+    margin-bottom: 0;
+}
+
+.table > thead th {
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    color: var(--ui-muted);
+    background: var(--ui-surface-2);
+    border-bottom-width: 1px;
+    white-space: nowrap;
+}
+
+.table > :not(caption) > * > * {
+    padding: 0.7rem 1rem;
+}
+
+.badge {
+    font-weight: 600;
+    border-radius: 6px;
+}
+
+.alert {
+    border-radius: 10px;
+}
+
+.modal-content {
+    background: var(--ui-surface);
+    border-color: var(--ui-border);
+    border-radius: var(--ui-radius);
+}
+
+.dropdown-menu {
+    --bs-dropdown-bg: var(--ui-surface);
+    --bs-dropdown-border-color: var(--ui-border);
+    --bs-dropdown-link-active-bg: var(--ui-primary);
+    border-radius: 10px;
+    box-shadow: var(--ui-shadow-lg);
+    font-size: 0.875rem;
+}
+
+.pagination {
+    --bs-pagination-active-bg: var(--ui-primary);
+    --bs-pagination-active-border-color: var(--ui-primary);
+    --bs-pagination-color: var(--ui-text);
+    --bs-pagination-bg: var(--ui-surface);
+    --bs-pagination-border-color: var(--ui-border);
+    margin-bottom: 0;
+}
+
+/* Ikonka qutisi (kartalar, bo'limlar) */
+.icon-tile {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    display: grid;
+    place-items: center;
+    background: var(--ui-primary-soft);
+    color: var(--ui-primary);
+    font-size: 1rem;
+    flex-shrink: 0;
+}
+
+/* Bosilsa boshqa sahifaga o'tadigan karta */
+.link-card {
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+    height: 100%;
+    padding: 16px;
+    border: 1px solid var(--ui-border);
+    border-radius: var(--ui-radius);
+    background: var(--ui-surface);
+    color: var(--ui-text);
+    text-decoration: none;
+    box-shadow: var(--ui-shadow);
+    transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s;
+}
+
+.link-card:hover {
+    color: var(--ui-text);
+    border-color: rgba(var(--ui-primary-rgb), 0.5);
+    box-shadow: var(--ui-shadow-lg);
+    transform: translateY(-1px);
+}
+
+.link-card .title {
+    font-weight: 600;
+    font-size: 0.9375rem;
+}
+
+.link-card .desc {
+    color: var(--ui-muted);
+    font-size: 0.8125rem;
+    margin-top: 2px;
+}
+
+.section-title {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--ui-muted);
+    margin: 28px 0 12px;
+}
+
+.empty-state {
+    text-align: center;
+    padding: 40px 16px;
+    color: var(--ui-muted);
+}
+
+.empty-state i {
+    font-size: 1.75rem;
+    margin-bottom: 10px;
+    opacity: 0.6;
+}
+
+.text-muted {
+    color: var(--ui-muted) !important;
+}
+
+/* Chiqish oynasi (buyruq natijasi) */
+.console-output {
+    background: #0f0f14;
+    color: #e4e4ea;
+    border: 1px solid var(--ui-border);
+    border-radius: 10px;
+    padding: 16px;
+    max-height: 60vh;
+    overflow: auto;
+    font-size: 12.5px;
+    line-height: 1.55;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+/* Fayl tanlash maydoni (input[type=file] ustidagi label) */
+.dropzone {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 28px 16px;
+    border: 1.5px dashed var(--ui-border);
+    border-radius: var(--ui-radius);
+    background: var(--ui-surface-2);
+    color: var(--ui-muted);
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.15s, background-color 0.15s;
+}
+
+.dropzone:hover,
+.dropzone.is-dragover {
+    border-color: var(--ui-primary);
+    background: var(--ui-primary-soft);
+}
+
+.dropzone i {
+    font-size: 1.5rem;
+    color: var(--ui-primary);
+}
+
+.dropzone .dropzone-file {
+    color: var(--ui-text);
+    font-weight: 500;
+}
+
+/* Login sahifasi */
+.auth-page {
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    padding: 24px 16px;
+    background:
+        radial-gradient(1200px 600px at 10% -10%, rgba(var(--ui-primary-rgb), 0.12), transparent 60%),
+        radial-gradient(900px 500px at 110% 110%, rgba(var(--ui-primary-rgb), 0.10), transparent 60%),
+        var(--ui-bg);
+}
+
+.auth-card {
+    width: 100%;
+    max-width: 400px;
+}
+
+/* Scrollbar */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: var(--ui-border) transparent;
+}

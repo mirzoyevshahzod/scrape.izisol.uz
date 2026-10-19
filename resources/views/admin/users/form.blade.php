@@ -1,16 +1,21 @@
-@extends('layouts.admin')
+@extends('layouts.app')
 
 @section('title', $user->exists ? 'Foydalanuvchini tahrirlash' : 'Yangi foydalanuvchi')
 
 @section('content')
-    <div class="mb-4">
-        <a href="{{ route('admin.users.index') }}" class="text-decoration-none small">
-            <i class="fas fa-arrow-left me-1"></i>Foydalanuvchilar
-        </a>
-        <h3 class="mt-2 mb-0">{{ $user->exists ? $user->email : 'Yangi foydalanuvchi' }}</h3>
+    <div class="page-header">
+        <div>
+            <a href="{{ route('admin.users.index') }}" class="small text-decoration-none">
+                <i class="fas fa-arrow-left me-1"></i>Foydalanuvchilar
+            </a>
+            <h1 class="mt-1">{{ $user->exists ? $user->name : 'Yangi foydalanuvchi' }}</h1>
+            @if ($user->exists)
+                <p>{{ $user->email }}</p>
+            @endif
+        </div>
     </div>
 
-    <div class="card page-card" style="max-width: 720px;">
+    <div class="card" style="max-width: 720px;">
         <div class="card-body p-4">
             <form method="POST" action="{{ $user->exists ? route('admin.users.update', $user) : route('admin.users.store') }}">
                 @csrf
@@ -60,7 +65,7 @@
                             <label class="form-check-label" for="role-{{ $role->id }}">
                                 {{ $role->name }}
                                 @if ($role->name === 'super_admin')
-                                    <span class="badge bg-danger">to'liq ruxsat</span>
+                                    <span class="badge bg-danger-subtle text-danger-emphasis">to'liq ruxsat</span>
                                 @endif
                             </label>
                         </div>
@@ -72,7 +77,7 @@
                 </div>
 
                 <div class="d-flex gap-2">
-                    <button type="submit" class="btn btn-gradient">
+                    <button type="submit" class="btn btn-primary">
                         <i class="fas fa-save me-1"></i>Saqlash
                     </button>
                     <a href="{{ route('admin.users.index') }}" class="btn btn-light">Bekor qilish</a>

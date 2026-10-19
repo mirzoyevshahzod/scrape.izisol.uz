@@ -1,13 +1,16 @@
-@extends('layouts.admin')
+@extends('layouts.app')
 
 @section('title', $role->exists ? 'Rolni tahrirlash' : 'Yangi rol')
 
 @section('content')
-    <div class="mb-4">
-        <a href="{{ route('admin.roles.index') }}" class="text-decoration-none small">
-            <i class="fas fa-arrow-left me-1"></i>Rollar
-        </a>
-        <h3 class="mt-2 mb-0">{{ $role->exists ? $role->name : 'Yangi rol' }}</h3>
+    <div class="page-header">
+        <div>
+            <a href="{{ route('admin.roles.index') }}" class="small text-decoration-none">
+                <i class="fas fa-arrow-left me-1"></i>Rollar
+            </a>
+            <h1 class="mt-1">{{ $role->exists ? $role->name : 'Yangi rol' }}</h1>
+            <p>Rol nomi va u beradigan ruxsatlar.</p>
+        </div>
     </div>
 
     <form method="POST" action="{{ $role->exists ? route('admin.roles.update', $role) : route('admin.roles.store') }}">
@@ -16,7 +19,7 @@
             @method('PUT')
         @endif
 
-        <div class="card page-card mb-4" style="max-width: 720px;">
+        <div class="card mb-4" style="max-width: 720px;">
             <div class="card-body p-4">
                 <label for="name" class="form-label">Rol nomi</label>
                 <input id="name" name="name" value="{{ old('name', $role->name) }}"
@@ -31,7 +34,7 @@
         <div class="row g-4 mb-4">
             @foreach ($groups as $group => $permissions)
                 <div class="col-lg-4 col-md-6">
-                    <div class="card page-card h-100">
+                    <div class="card h-100">
                         <div class="card-body p-4">
                             <div class="d-flex justify-content-between align-items-center mb-3">
                                 <h6 class="mb-0 fw-bold">{{ $group }}</h6>
@@ -56,7 +59,7 @@
         </div>
 
         <div class="d-flex gap-2">
-            <button type="submit" class="btn btn-gradient">
+            <button type="submit" class="btn btn-primary">
                 <i class="fas fa-save me-1"></i>Saqlash
             </button>
             <a href="{{ route('admin.roles.index') }}" class="btn btn-light">Bekor qilish</a>

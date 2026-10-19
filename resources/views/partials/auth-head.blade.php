@@ -3,7 +3,9 @@
     1) Barcha same-origin POST/PUT/DELETE fetch so'rovlariga CSRF token qo'shadi
        (/api/* endpoint'lar endi session + CSRF bilan himoyalangan).
     2) Sessiya tugagan bo'lsa (401/419 yoki /login'ga redirect), login sahifasiga o'tkazadi.
-    3) O'ng yuqori burchakda foydalanuvchi nomi va "Chiqish" tugmasini ko'rsatadi.
+    3) O'ng yuqori burchakda foydalanuvchi nomi va "Chiqish" tugmasini ko'rsatadi
+       (layouts/app'da o'chirilgan — u yerda yuqori panelda foydalanuvchi menyusi bor:
+       @include('partials.auth-head', ['chip' => false])).
 --}}
 <meta name="csrf-token" content="{{ csrf_token() }}">
 <script>
@@ -40,7 +42,7 @@
         };
     })();
 </script>
-@auth
+@if (auth()->check() && ($chip ?? true))
     <style>
         .auth-chip {
             position: fixed;
@@ -80,4 +82,4 @@
             document.body.appendChild(document.getElementById('auth-chip-template').content.cloneNode(true));
         });
     </script>
-@endauth
+@endif
