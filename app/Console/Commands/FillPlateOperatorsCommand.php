@@ -16,7 +16,13 @@ use Throwable;
  * Excel'dagi har bir mashina raqami bo'yicha Zanjeer CRM'dagi zakazlarni
  * (/orders/orders?filter[search]=...) qidirib, ularda eng ko'p qatnashgan
  * OPERATION menejerini oxirgi "Manager" ustuniga yozadi, so'ng qatorlarni
- * "Company" ustuni bo'yicha alifbo tartibida saralab, faylni joyida saqlaydi.
+ * kompaniya nomi bo'yicha alifbo tartibida saralab, faylni joyida (yoki
+ * --output berilsa o'sha yerga) saqlaydi.
+ *
+ * Har xil scrape fayllarda ustun nomlari turlicha (Mashina raqami / Plate /
+ * Avtomobil raqami / Рег.номер, Company / Company Name), shuning uchun ular
+ * avtomatik aniqlanadi. Kompaniya ustuni bo'lmasa (masalan kazakhstan-china),
+ * faqat Manager qo'shiladi, saralanmaydi.
  *
  * CRM'da zakazlar uchun JSON API yo'q — sahifa HTML bo'lib keladi va har
  * bir zakaz alohida karta. Bitta asosiy zakaz va uning sub-zakazlarida
@@ -31,8 +37,9 @@ class FillPlateOperatorsCommand extends Command
 {
     protected $signature = 'crm:plate-operators
                             {file : To\'liq yo\'l, masalan storage/app/import_qozoq/qozoq_..._tekshirilgan.xlsx}
-                            {--plate-column=Mashina raqami : Mashina raqami ustuni sarlavhasi}
-                            {--sort-column=Company : Saralash ustuni sarlavhasi}
+                            {--output= : Natijani shu faylga yozish (bo\'sh bo\'lsa asl fayl ustidan yoziladi)}
+                            {--plate-column= : Mashina raqami ustuni sarlavhasi (bo\'sh bo\'lsa avtomatik)}
+                            {--sort-column= : Saralash ustuni sarlavhasi (bo\'sh bo\'lsa avtomatik)}
                             {--delay=500 : So\'rovlar orasidagi pauza (ms)}';
 
     protected $description = 'Mashina raqami bo\'yicha Zanjeer CRM zakazlaridan eng ko\'p OPERATION menejerni topib, "Manager" ustuniga yozadi va Company bo\'yicha saralaydi';
@@ -45,6 +52,10 @@ class FillPlateOperatorsCommand extends Command
 
     private const NOT_FOUND = 'topilmadi';
 
+    private const PLATE_HEADERS = ['Mashina raqami', 'Plate', 'Avtomobil raqami', 'Рег.номер'];
+
+    private const COMPANY_HEADERS = ['Company', 'Company Name'];
+
     private array $cookies = [];
 
     private bool $reloggedIn = false;
@@ -55,6 +66,7 @@ class FillPlateOperatorsCommand extends Command
     public function handle(): int
     {
         $file = $this->argument('file');
+        $output = $this->option('output') ?: $file;
 
         if (! file_exists($file)) {
             $this->error("Fayl topilmadi: {$file}");
@@ -69,15 +81,19 @@ class FillPlateOperatorsCommand extends Command
         if (count($rows) < 2) {
             $this->warn("Faylda ma'lumot yo'q: {$file}");
 
+            if ($output !== $file) {
+                copy($file, $output);
+            }
+
             return self::SUCCESS;
         }
 
         $headers = array_map(fn ($h) => trim((string) $h), $rows[0]);
-        $plateCol = array_search($this->option('plate-column'), $headers, true);
-        $sortCol = array_search($this->option('sort-column'), $headers, true);
+        $plateCol = self::findColumn($headers, $this->option('plate-column') ? [$this->option('plate-column')] : self::PLATE_HEADERS);
+        $sortCol = self::findColumn($headers, $this->option('sort-column') ? [$this->option('sort-column')] : self::COMPANY_HEADERS);
 
-        if ($plateCol === false || $sortCol === false) {
-            $this->error('Kerakli ustun topilmadi: "' . $this->option('plate-column') . '" yoki "' . $this->option('sort-column') . '".');
+        if ($plateCol === null) {
+            $this->error('Mashina raqami ustuni topilmadi: ' . json_encode($headers, JSON_UNESCAPED_UNICODE));
 
             return self::FAILURE;
         }
@@ -136,24 +152,26 @@ class FillPlateOperatorsCommand extends Command
             $data[$i][$managerCol] = $cache[$plate];
         }
 
-        usort($data, function (array $a, array $b) use ($sortCol) {
-            $x = self::companySortKey((string) ($a[$sortCol] ?? ''));
-            $y = self::companySortKey((string) ($b[$sortCol] ?? ''));
+        if ($sortCol !== null) {
+            usort($data, function (array $a, array $b) use ($sortCol) {
+                $x = self::companySortKey((string) ($a[$sortCol] ?? ''));
+                $y = self::companySortKey((string) ($b[$sortCol] ?? ''));
 
-            // kompaniya nomi bo'sh qatorlar oxiriga tushadi
-            if ($x === '' || $y === '') {
-                return ($x === '') <=> ($y === '');
-            }
+                // kompaniya nomi bo'sh qatorlar oxiriga tushadi
+                if ($x === '' || $y === '') {
+                    return ($x === '') <=> ($y === '');
+                }
 
-            return strnatcmp($x, $y);
-        });
+                return strnatcmp($x, $y);
+            });
+        }
 
         $sheet->fromArray($headers, null, 'A1');
         $sheet->fromArray($data, null, 'A2', true);
 
-        (new Xlsx($spreadsheet))->save($file);
+        (new Xlsx($spreadsheet))->save($output);
 
-        $this->info("Tayyor: {$file} (" . count($data) . ' qator, ' . count($cache) . ' ta noyob raqam)');
+        $this->info("Tayyor: {$output} (" . count($data) . ' qator, ' . count($cache) . ' ta noyob raqam)');
 
         if ($this->sessionBroken) {
             $this->error('CRM\'ga kirib bo\'lmadi — Manager ustuni to\'liq to\'ldirilmadi.');
@@ -257,6 +275,19 @@ class FillPlateOperatorsCommand extends Command
         $text = trim(preg_replace('/\s+/u', ' ', $value->first()->text('')));
 
         return $text !== '' ? $text : null;
+    }
+
+    private static function findColumn(array $headers, array $candidates): ?int
+    {
+        foreach ($candidates as $candidate) {
+            $index = array_search($candidate, $headers, true);
+
+            if ($index !== false) {
+                return $index;
+            }
+        }
+
+        return null;
     }
 
     /**
