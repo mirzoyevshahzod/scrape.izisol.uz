@@ -214,6 +214,21 @@
                             Excel Fayllarni Birlashtirish
                         </a>
                         @endcan
+                        @canany(['admin.users', 'admin.roles'])
+                            <hr class="mx-3 my-2" style="border-color: rgba(255,255,255,0.3);">
+                        @endcanany
+                        @can('admin.users')
+                            <a class="nav-link" href="{{ route('admin.users.index') }}">
+                                <i class="fas fa-users me-2"></i>
+                                Foydalanuvchilar
+                            </a>
+                        @endcan
+                        @can('admin.roles')
+                            <a class="nav-link" href="{{ route('admin.roles.index') }}">
+                                <i class="fas fa-user-shield me-2"></i>
+                                Rollar
+                            </a>
+                        @endcan
                     </nav>
                 </div>
             </div>

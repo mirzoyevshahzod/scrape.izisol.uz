@@ -1,5 +1,7 @@
 <?php
 
+use App\Http\Controllers\Admin\RoleController;
+use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\HomeController;
 use Illuminate\Support\Facades\Route;
@@ -63,4 +65,10 @@ Route::middleware('auth')->group(function () {
     Route::get('/filter-uzbek-car-number', [HomeController::class, 'filterUzbekCarNumber'])->name('filterUzbekCarNumber')->middleware('permission:page.uzbek-plates');
 
     Route::get('/merge-excel-files', [HomeController::class, 'mergeExcelFiles'])->name('mergeExcelFiles')->middleware('permission:page.merge-excel');
+
+    // Administrator: foydalanuvchilar va rollar
+    Route::prefix('admin')->name('admin.')->group(function () {
+        Route::resource('users', UserController::class)->except('show')->middleware('permission:admin.users');
+        Route::resource('roles', RoleController::class)->except('show')->middleware('permission:admin.roles');
+    });
 });
