@@ -86,6 +86,17 @@
 @push('scripts')
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11.14.5"></script>
 <script>
+
+        // Fayl nomi va server javobi HTML sifatida emas, oddiy matn sifatida
+        // chiqishi uchun (XSS).
+        function esc(value) {
+            return String(value ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
         const uploadArea = document.getElementById('uploadArea');
         const fileInput = document.getElementById('fileInput');
         const fileInfo = document.getElementById('fileInfo');
@@ -171,7 +182,7 @@
 
                 <div>
                     <div class="fw-semibold">
-                        ${index + 1}. ${file.name}
+                        ${index + 1}. ${esc(file.name)}
                     </div>
 
                     <div class="text-muted small">
@@ -257,7 +268,7 @@
                                     white-space:pre-wrap;
                                     max-height:400px;
                                     overflow:auto;
-                                ">${text}</pre>
+                                ">${esc(text)}</pre>
                             `
                         });
 
