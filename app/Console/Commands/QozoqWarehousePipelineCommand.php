@@ -95,6 +95,18 @@ class QozoqWarehousePipelineCommand extends Command
 
         $this->info("Tekshirilgan fayl saqlandi: {$importedQozoqFile}");
 
+        // Mashina raqami bo'yicha CRM'dan OPERATION menejerini "Manager"
+        // ustuniga yozib, Company bo'yicha saralaydi. Xato bo'lsa fayl
+        // menejersiz qoladi, lekin pipeline davom etadi.
+        try {
+            $this->info('Manager ustuni qo\'shilmoqda (crm:plate-operators)...');
+            Artisan::call('crm:plate-operators', ['file' => $importedQozoqFile]);
+            $this->info(Artisan::output());
+        } catch (\Throwable $e) {
+            Log::error('crm:plate-operators muvaffaqiyatsiz', ['error' => $e->getMessage()]);
+            $this->warn('Manager ustunini qo\'shishda xato: ' . $e->getMessage());
+        }
+
         $mergeFiles = array_values(array_filter([
             $importedQozoqFile,
             $this->latestFile(storage_path('app/declarant'), 'benyakoni-*.xlsx'),
