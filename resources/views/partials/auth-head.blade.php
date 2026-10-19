@@ -3,9 +3,6 @@
     1) Barcha same-origin POST/PUT/DELETE fetch so'rovlariga CSRF token qo'shadi
        (/api/* endpoint'lar endi session + CSRF bilan himoyalangan).
     2) Sessiya tugagan bo'lsa (401/419 yoki /login'ga redirect), login sahifasiga o'tkazadi.
-    3) O'ng yuqori burchakda foydalanuvchi nomi va "Chiqish" tugmasini ko'rsatadi
-       (layouts/app'da o'chirilgan — u yerda yuqori panelda foydalanuvchi menyusi bor:
-       @include('partials.auth-head', ['chip' => false])).
 --}}
 <meta name="csrf-token" content="{{ csrf_token() }}">
 <script>
@@ -42,44 +39,3 @@
         };
     })();
 </script>
-@if (auth()->check() && ($chip ?? true))
-    <style>
-        .auth-chip {
-            position: fixed;
-            top: 12px;
-            right: 12px;
-            z-index: 1040; /* Bootstrap modal (1050+) ostida qoladi */
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            padding: 6px 8px 6px 14px;
-            background: rgba(255, 255, 255, 0.95);
-            border-radius: 999px;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
-            font-size: 14px;
-        }
-        .auth-chip form { margin: 0; }
-        .auth-chip button {
-            border: none;
-            border-radius: 999px;
-            padding: 4px 12px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: #fff;
-            font-size: 13px;
-        }
-    </style>
-    <template id="auth-chip-template">
-        <div class="auth-chip">
-            <span>{{ auth()->user()->name }}</span>
-            <form method="POST" action="{{ route('logout') }}">
-                @csrf
-                <button type="submit">Chiqish</button>
-            </form>
-        </div>
-    </template>
-    <script>
-        document.addEventListener('DOMContentLoaded', function () {
-            document.body.appendChild(document.getElementById('auth-chip-template').content.cloneNode(true));
-        });
-    </script>
-@endif

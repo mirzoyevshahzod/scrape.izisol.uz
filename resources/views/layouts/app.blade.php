@@ -2,7 +2,7 @@
 <html lang="uz" data-bs-theme="light">
 <head>
     <meta charset="UTF-8">
-    @include('partials.auth-head', ['chip' => false])
+    @include('partials.auth-head')
     @include('partials.theme-init')
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>@yield('title') — Scraping Dashboard</title>
