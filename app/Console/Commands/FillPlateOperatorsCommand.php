@@ -24,7 +24,8 @@ use Throwable;
  * (root) bir marta sanaladi.
  *
  * Sessiya `crm_tokens` jadvalidan olinadi (`crm:login`). Eskirgan bo'lsa,
- * bir marta `crm:login --fresh` qilib qayta uriniladi.
+ * bir marta `crm:login` qilib qayta uriniladi; bu ham o'xshamasa, qolgan
+ * raqamlar so'ralmaydi (Manager bo'sh qoladi), fayl baribir saralanadi.
  */
 class FillPlateOperatorsCommand extends Command
 {
@@ -47,6 +48,9 @@ class FillPlateOperatorsCommand extends Command
     private array $cookies = [];
 
     private bool $reloggedIn = false;
+
+    /** CRM'ga kirib bo'lmasa true — qolgan raqamlar uchun so'rov yuborilmaydi */
+    private bool $sessionBroken = false;
 
     public function handle(): int
     {
@@ -86,12 +90,22 @@ class FillPlateOperatorsCommand extends Command
             $headers[] = self::MANAGER_HEADER;
         }
 
-        $this->loadCookies();
-
         $data = array_slice($rows, 1);
         $cache = [];
 
+        try {
+            $this->loadCookies();
+        } catch (Throwable $e) {
+            $this->error($e->getMessage());
+        }
+
         foreach ($data as $i => $row) {
+            if ($this->sessionBroken) {
+                $data[$i][$managerCol] = '';
+
+                continue;
+            }
+
             $plate = $this->normalizePlate((string) ($row[$plateCol] ?? ''));
 
             // juda qisqa qiymat (masalan "01") CRM'da minglab natija qaytaradi
@@ -106,6 +120,13 @@ class FillPlateOperatorsCommand extends Command
                     $cache[$plate] = $this->topOperation($plate) ?? self::NOT_FOUND;
                 } catch (Throwable $e) {
                     $this->error("{$plate}: " . $e->getMessage());
+
+                    if ($this->sessionBroken) {
+                        $data[$i][$managerCol] = '';
+
+                        continue;
+                    }
+
                     $cache[$plate] = 'ERROR';
                 }
 
@@ -133,6 +154,12 @@ class FillPlateOperatorsCommand extends Command
         (new Xlsx($spreadsheet))->save($file);
 
         $this->info("Tayyor: {$file} (" . count($data) . ' qator, ' . count($cache) . ' ta noyob raqam)');
+
+        if ($this->sessionBroken) {
+            $this->error('CRM\'ga kirib bo\'lmadi — Manager ustuni to\'liq to\'ldirilmadi.');
+
+            return self::FAILURE;
+        }
 
         return self::SUCCESS;
     }
@@ -265,14 +292,7 @@ class FillPlateOperatorsCommand extends Command
 
         // sessiya eskirgan bo'lsa Laravel /login'ga redirect qiladi
         if ($response->redirect() && str_contains((string) $response->header('Location'), '/login')) {
-            if ($this->reloggedIn) {
-                throw new RuntimeException('CRM sessiyasi qayta login qilingandan keyin ham ishlamayapti.');
-            }
-
-            $this->warn('CRM sessiyasi eskirgan, crm:login --fresh ishga tushirilmoqda...');
-            Artisan::call('crm:login', ['--fresh' => true]);
-            $this->reloggedIn = true;
-            $this->loadCookies();
+            $this->relogin('CRM sessiyasi eskirgan');
 
             return $this->fetchPage($plate, $page);
         }
@@ -289,22 +309,39 @@ class FillPlateOperatorsCommand extends Command
         $token = CrmToken::where('name', 'zanjeer_crm')->first();
 
         if (! $token || ! $token->session_cookie) {
-            if ($this->reloggedIn) {
-                throw new RuntimeException('CRM tokenlarini olib bo\'lmadi. "php artisan crm:login" ni tekshiring.');
-            }
+            $this->relogin('CRM tokenlari topilmadi');
 
-            Artisan::call('crm:login', ['--fresh' => true]);
-            $this->reloggedIn = true;
-            $token = CrmToken::where('name', 'zanjeer_crm')->first();
-        }
-
-        if (! $token || ! $token->session_cookie) {
-            throw new RuntimeException('CRM tokenlarini olib bo\'lmadi. "php artisan crm:login" ni tekshiring.');
+            return;
         }
 
         $this->cookies = array_filter([
             'XSRF-TOKEN' => $token->xsrf_token,
             $token->session_cookie_name => $token->session_cookie,
         ]);
+    }
+
+    /**
+     * `--fresh`siz chaqiriladi: u allaqachon ishlab turgan chromedriver'ni
+     * chetlab o'tib yangisini ishga tushirishga majburlaydi, serverda esa
+     * CHROMEDRIVER_BINARY bo'sh — shuning uchun oddiy `crm:login` ishlatiladi.
+     */
+    private function relogin(string $reason): void
+    {
+        if ($this->reloggedIn) {
+            $this->sessionBroken = true;
+
+            throw new RuntimeException("{$reason}, qayta login qilingandan keyin ham. \"php artisan crm:login\" ni tekshiring.");
+        }
+
+        $this->reloggedIn = true;
+        $this->warn("{$reason}, crm:login ishga tushirilmoqda...");
+
+        if (Artisan::call('crm:login') !== self::SUCCESS) {
+            $this->sessionBroken = true;
+
+            throw new RuntimeException('crm:login muvaffaqiyatsiz: ' . trim(Artisan::output()));
+        }
+
+        $this->loadCookies();
     }
 }
