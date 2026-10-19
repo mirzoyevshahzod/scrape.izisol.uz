@@ -74,6 +74,11 @@
                         <a class="nav-link" href="{{ route('home') }}">
                             <i class="fas fa-home me-2"></i>Bosh sahifa
                         </a>
+                        @canany(['operation.crm-login', 'operation.pipeline', 'operation.telegram', 'operation.scraping'])
+                            <a class="nav-link @if(request()->routeIs('operations.*')) active @endif" href="{{ route('operations.index') }}">
+                                <i class="fas fa-sliders-h me-2"></i>Boshqaruv
+                            </a>
+                        @endcanany
                         @can('admin.users')
                             <a class="nav-link @if(request()->routeIs('admin.users.*')) active @endif" href="{{ route('admin.users.index') }}">
                                 <i class="fas fa-users me-2"></i>Foydalanuvchilar

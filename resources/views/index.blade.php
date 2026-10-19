@@ -214,8 +214,14 @@
                             Excel Fayllarni Birlashtirish
                         </a>
                         @endcan
-                        @canany(['admin.users', 'admin.roles'])
+                        @canany(['operation.crm-login', 'operation.pipeline', 'operation.telegram', 'operation.scraping', 'admin.users', 'admin.roles'])
                             <hr class="mx-3 my-2" style="border-color: rgba(255,255,255,0.3);">
+                        @endcanany
+                        @canany(['operation.crm-login', 'operation.pipeline', 'operation.telegram', 'operation.scraping'])
+                            <a class="nav-link" href="{{ route('operations.index') }}">
+                                <i class="fas fa-sliders-h me-2"></i>
+                                Boshqaruv
+                            </a>
                         @endcanany
                         @can('admin.users')
                             <a class="nav-link" href="{{ route('admin.users.index') }}">

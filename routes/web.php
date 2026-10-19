@@ -4,6 +4,7 @@ use App\Http\Controllers\Admin\RoleController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\HomeController;
+use App\Http\Controllers\OperationController;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\EomborScrapeController;
 use App\Http\Controllers\ExampleController;
@@ -65,6 +66,16 @@ Route::middleware('auth')->group(function () {
     Route::get('/filter-uzbek-car-number', [HomeController::class, 'filterUzbekCarNumber'])->name('filterUzbekCarNumber')->middleware('permission:page.uzbek-plates');
 
     Route::get('/merge-excel-files', [HomeController::class, 'mergeExcelFiles'])->name('mergeExcelFiles')->middleware('permission:page.merge-excel');
+
+    // Boshqaruv: queue orqali amallarni ishga tushirish (har bir amal o'z permission'ini controller'da tekshiradi)
+    Route::prefix('operations')->name('operations.')
+        ->middleware('permission:operation.crm-login|operation.pipeline|operation.telegram|operation.scraping')
+        ->group(function () {
+            Route::get('/', [OperationController::class, 'index'])->name('index');
+            Route::get('/runs', [OperationController::class, 'runs'])->name('runs');
+            Route::get('/runs/{run}', [OperationController::class, 'show'])->name('show');
+            Route::post('/{operation}/run', [OperationController::class, 'run'])->name('run');
+        });
 
     // Administrator: foydalanuvchilar va rollar
     Route::prefix('admin')->name('admin.')->group(function () {

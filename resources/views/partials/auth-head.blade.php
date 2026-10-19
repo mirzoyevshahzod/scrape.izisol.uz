@@ -46,7 +46,7 @@
             position: fixed;
             top: 12px;
             right: 12px;
-            z-index: 1080;
+            z-index: 1040; /* Bootstrap modal (1050+) ostida qoladi */
             display: flex;
             align-items: center;
             gap: 8px;

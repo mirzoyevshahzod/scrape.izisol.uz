@@ -29,12 +29,8 @@ Schedule::command('crm:login')
         "Muvaffaqiyatsiz tugadi, batafsil: storage/logs/laravel-" . now()->format('Y-m-d') . '.log'
     ));
 
-$qoldauCheckpoints = [
-    'Kazakhstan - Russia',
-    'Kazakhstan - Uzbekistan',
-    'Kazakhstan - China',
-    'Kazakhstan - Kyrgyzstan',
-];
+// "Barcha scraping" tugmasi bilan umumiy ro'yxat (config/operations.php)
+$qoldauCheckpoints = config('operations.qoldau_checkpoints');
 
 foreach ($qoldauCheckpoints as $checkpoint) {
     Schedule::command('qoldau:scrape', [$checkpoint])
@@ -46,7 +42,7 @@ foreach ($qoldauCheckpoints as $checkpoint) {
         ));
 }
 
-$declarantZones = ['benyakoni', 'kamennii-log', 'kozlovichi'];
+$declarantZones = config('operations.declarant_zones');
 
 foreach ($declarantZones as $zone) {
     Schedule::command('scrape:declarant-data', [$zone])
