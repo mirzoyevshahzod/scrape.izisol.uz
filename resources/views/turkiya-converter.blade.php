@@ -1,174 +1,60 @@
-<!DOCTYPE html>
-<html lang="uz">
-<head>
-    <meta charset="UTF-8">
-    @include('partials.auth-head')
-    <meta name="csrf-token" content="{{ csrf_token() }}">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Turkiya Files</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    <style>
-        body {
-            background-color: #f8f9fa;
-        }
-        .main-content {
-            padding: 30px;
-        }
-        .page-card {
-            background: white;
-            border-radius: 15px;
-            padding: 40px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
-            min-height: 400px;
-        }
-        .page-title {
-            font-size: 3rem;
-            font-weight: bold;
-            color: #667eea;
-            margin-bottom: 20px;
-        }
-        .page-subtitle {
-            font-size: 1.2rem;
-            color: #6c757d;
-            text-align: center;
-        }
-        .header-title {
-            color: #495057;
-            font-weight: 600;
-            margin-bottom: 30px;
-        }
-        .form-control:focus, .form-select:focus {
-            border-color: #667eea;
-            box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
-        }
-        .btn-primary {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            border: none;
-        }
-        .btn-primary:hover {
-            background: linear-gradient(135deg, #5a6fd8 0%, #6a4190 100%);
-            transform: translateY(-2px);
-        }
-        .alert {
-            border-radius: 10px;
-            border: none;
-        }
-        .card {
-            border: none;
-            border-radius: 15px;
-        }
-        .card-header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border-radius: 15px 15px 0 0 !important;
-            border: none;
-        }
-        .info-card {
-            background: linear-gradient(135deg, #e3f2fd 0%, #f3e5f5 100%);
-            border: 1px solid rgba(102, 126, 234, 0.1);
-        }
-        .upload-area {
-            border: 2px dashed rgba(102, 126, 234, 0.3);
-            border-radius: 15px;
-            padding: 20px;
-            text-align: center;
-            transition: all 0.3s ease;
-        }
-        .upload-area:hover {
-            border-color: #667eea;
-            background: rgba(102, 126, 234, 0.05);
-        }
-        .drag-over {
-            background: rgba(102, 126, 234, 0.1);
-            border-color: #667eea;
-        }
-        .file-uploaded {
-            background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
-        }
-    </style>
-</head>
-<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-<body>
-    <div class="container-fluid">
-        <div class="row">
-            <div class="col-12">
-                <div class="main-content">
-                    <h1 class="header-title">
-                        <i class="fas fa-search me-2"></i>
-                        Turkiya fayllarini Formatlash
-                    </h1>
+@extends('layouts.app')
 
-                    <div class="page-card">
-                        <div class="container-fluid">
-                            <div class="row justify-content-center">
-                                <div class="col-md-10">
-                                    <div class="text-center mb-4">
-                                        <i class="fas fa-search" style="font-size: 3rem; color: #667eea; margin-bottom: 15px;"></i>
-                                        <h2 class="page-title" style="font-size: 2.5rem;"> Turkiya fayllarini Formatlash</h2>
-                                        <p class="page-subtitle">Turkiya fayllarini zanjeerga yuklash uchun tayyorlash</p>
-                                    </div>
-                                    
-                                    @if(session('error'))
-                                        <div class="alert alert-danger alert-dismissible fade show" role="alert">
-                                            <i class="fas fa-exclamation-triangle me-2"></i>
-                                            {{ session('error') }}
-                                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                                        </div>
-                                    @endif
+@section('title', 'Turkiya Converter')
 
-                                    @if(session('success'))
-                                        <div class="alert alert-success alert-dismissible fade show" role="alert">
-                                            <i class="fas fa-check-circle me-2"></i>
-                                            {{ session('success') }}
-                                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                                        </div>
-                                    @endif
+@section('content')
+    <div class="page-header">
+        <div>
+            <h1>Turkiya Converter</h1>
+            <p>Turkiya fayllarini Zanjeer CRM'ga yuklash uchun kerakli formatga o'tkazish.</p>
+        </div>
+    </div>
 
-                                    <div class="card shadow-sm">
-                                        <div class="card-header">
-                                            <h5 class="mb-0">
-                                                <i class="fas fa-cogs me-2"></i>
-                                                Fayl Yuklash Parametrlari
-                                            </h5>
-                                        </div>
-                                        <div class="card-body p-4">
-                                            <form id="uploadForm" enctype="multipart/form-data">
-                                                @csrf
-                                                 <div class="mb-4">
-                                                <label for="region" class="form-label fw-bold">
-                                                    <i class="fas fa-globe me-2 text-primary"></i>Yuklab olish uchun fayl tanlang:
-                                                </label>
-                                                <select name="region" id="region" class="form-select form-select-lg" required>
-                                                    <option value="">-- Fayllar --</option>
-                                                </select>
-                                                <div class="form-text">
-                                                    <i class="fas fa-info-circle me-1"></i>
-                                                    Yuklab olish uchun fayl tanlang
-                                                </div>
-                                            </div>
+    @if (session('error'))
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            <i class="fas fa-triangle-exclamation me-2"></i>{{ session('error') }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    @endif
 
-                                                <div class="d-grid gap-2 mt-4">
-                                                    <button id="uploadBtn" type="submit" class="btn btn-primary btn-lg py-3" disabled>
-                                                        <i class="fas fa-upload me-2"></i>
-                                                        <span id="btnText">Avval fayl tanlang</span>
-                                                    </button>
-                                                </div>
-                                            </form>
-                                        </div>
-                                    </div>
-                                    
+    @if (session('success'))
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            <i class="fas fa-circle-check me-2"></i>{{ session('success') }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    @endif
 
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
+    <div class="row g-4">
+        <div class="col-lg-7 col-xl-6">
+            <div class="card action-card h-100">
+                <div class="card-body">
+                    <div class="action-head">
+                        <span class="icon-tile"><i class="fas fa-file-excel"></i></span>
+                        <div>
+                            <h2>Faylni formatlash</h2>
+                            <p>Turkiya scraping fayllaridan birini tanlang — formatlangan Excel fayl avtomatik yuklab olinadi.</p>
                         </div>
                     </div>
+
+                    <form id="uploadForm" enctype="multipart/form-data" class="mt-auto">
+                        @csrf
+                        <label for="region" class="form-label">Fayl</label>
+                        <select name="region" id="region" class="form-select mb-3" required>
+                            <option value="">-- Fayllar --</option>
+                        </select>
+                        <button id="uploadBtn" type="submit" class="btn btn-primary w-100 py-2" disabled>
+                            <i class="fas fa-wand-magic-sparkles me-1"></i>
+                            <span id="btnText">Avval fayl tanlang</span>
+                        </button>
+                    </form>
                 </div>
             </div>
         </div>
     </div>
+@endsection
+
+@push('scripts')
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11.14.5"></script>
 <script>
 
 
@@ -311,6 +197,4 @@ document.addEventListener('DOMContentLoaded', async () =>
 
 
 </script>
-
-</body>
-</html>
+@endpush

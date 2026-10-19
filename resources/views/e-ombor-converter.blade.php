@@ -1,233 +1,91 @@
-<!DOCTYPE html>
-<html lang="uz">
+@extends('layouts.app')
 
-<head>
-    <meta charset="UTF-8">
-    @include('partials.auth-head')
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>E Ombor Files</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+@section('title', 'E-Ombor Converter')
+
+@push('styles')
     <style>
-        body {
-            background-color: #f8f9fa;
-        }
-
-        .main-content {
-            padding: 30px;
-        }
-
-        .page-card {
-            background: white;
-            border-radius: 15px;
-            padding: 40px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
-            min-height: 400px;
-        }
-
-        .page-title {
-            font-size: 3rem;
-            font-weight: bold;
-            color: #667eea;
-            margin-bottom: 20px;
-        }
-
-        .page-subtitle {
-            font-size: 1.2rem;
-            color: #6c757d;
-            text-align: center;
-        }
-
-        .header-title {
-            color: #495057;
-            font-weight: 600;
-            margin-bottom: 30px;
-        }
-
-        .form-control:focus,
-        .form-select:focus {
-            border-color: #667eea;
-            box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
-        }
-
-        .btn-primary {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            border: none;
-        }
-
-        .btn-primary:hover {
-            background: linear-gradient(135deg, #5a6fd8 0%, #6a4190 100%);
-            transform: translateY(-2px);
-        }
-
-        .alert {
-            border-radius: 10px;
-            border: none;
-        }
-
-        .card {
-            border: none;
-            border-radius: 15px;
-        }
-
-        .card-header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border-radius: 15px 15px 0 0 !important;
-            border: none;
-        }
-
-        .info-card {
-            background: linear-gradient(135deg, #e3f2fd 0%, #f3e5f5 100%);
-            border: 1px solid rgba(102, 126, 234, 0.1);
-        }
-
-        .upload-area {
-            border: 2px dashed rgba(102, 126, 234, 0.3);
-            border-radius: 15px;
-            padding: 20px;
-            text-align: center;
-            transition: all 0.3s ease;
-        }
-
-        .upload-area:hover {
-            border-color: #667eea;
-            background: rgba(102, 126, 234, 0.05);
-        }
-
-        .drag-over {
-            background: rgba(102, 126, 234, 0.1);
-            border-color: #667eea;
-        }
-
-        .file-uploaded {
-            background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+        /* JS ro'yxatga qo'shadigan tanlangan fayllar */
+        #fileList .list-group-item {
+            background: var(--ui-surface);
+            border-color: var(--ui-border);
+            color: var(--ui-text);
         }
     </style>
-</head>
-<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+@endpush
 
-<body>
-    <div class="container-fluid">
-        <div class="row">
-            <div class="col-12">
-                <div class="main-content">
-                    <h1 class="header-title">
-                        <i class="fas fa-search me-2"></i>
-                        E Ombor fayllarini Formatlash
-                    </h1>
+@section('content')
+    <div class="page-header">
+        <div>
+            <h1>E-Ombor Converter</h1>
+            <p>E-Ombor Excel fayllarini Zanjeer'ga yuklash uchun bitta formatlangan faylga aylantirish.</p>
+        </div>
+    </div>
 
-                    <div class="page-card">
-                        <div class="container-fluid">
-                            <div class="row justify-content-center">
-                                <div class="col-md-10">
-                                    <div class="text-center mb-4">
-                                        <i class="fas fa-search"
-                                            style="font-size: 3rem; color: #667eea; margin-bottom: 15px;"></i>
-                                        <h2 class="page-title" style="font-size: 2.5rem;"> E Ombor fayllarini Formatlash
-                                        </h2>
-                                        <p class="page-subtitle">E ombor fayllarini zanjeerga yuklash uchun tayyorlash
-                                        </p>
-                                    </div>
+    @if (session('error'))
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            <i class="fas fa-triangle-exclamation me-2"></i>{{ session('error') }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    @endif
 
-                                    @if(session('error'))
-                                        <div class="alert alert-danger alert-dismissible fade show" role="alert">
-                                            <i class="fas fa-exclamation-triangle me-2"></i>
-                                            {{ session('error') }}
-                                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                                        </div>
-                                    @endif
+    @if (session('success'))
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            <i class="fas fa-circle-check me-2"></i>{{ session('success') }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    @endif
 
-                                    @if(session('success'))
-                                        <div class="alert alert-success alert-dismissible fade show" role="alert">
-                                            <i class="fas fa-check-circle me-2"></i>
-                                            {{ session('success') }}
-                                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                                        </div>
-                                    @endif
-
-                                    <div class="card shadow-sm">
-                                        <div class="card-header">
-                                            <h5 class="mb-0">
-                                                <i class="fas fa-cogs me-2"></i>
-                                                Fayl Yuklash Parametrlari
-                                            </h5>
-                                        </div>
-                                        <div class="card-body p-4">
-                                            <form id="uploadForm" enctype="multipart/form-data">
-                                                @csrf
-                                                <div class="upload-area" id="uploadArea">
-                                                    <div class="mb-4">
-                                                        <i class="fas fa-upload"
-                                                            style="font-size: 2rem; color: #667eea;"></i>
-                                                        <h3 class="text-lg font-semibold text-gray-800 mt-2">
-                                                            Excel fayllarni bu yerga tashlang
-                                                        </h3>
-
-                                                        <p class="text-gray-600">
-                                                            yoki tanlash uchun bosing
-                                                        </p>
-
-                                                        <div class="text-sm text-gray-500 mt-2">
-                                                            Bir vaqtning o'zida bir nechta fayl tanlashingiz mumkin
-                                                        </div>
-
-                                                        <div class="text-sm text-gray-500 mt-2">
-                                                            Qo'llab-quvvatlanadigan formatlar:
-                                                            .xlsx, .xls, .csv
-                                                        </div>
-                                                        <input type="file" id="fileInput" name="excel_files[]"
-                                                            accept=".xlsx,.xls,.csv" class="d-none" multiple>
-                                                    </div>
-                                                </div>
-
-                                                <div id="fileInfo" class="mt-4 p-4 bg-light rounded-lg d-none">
-
-                                                    <div class="d-flex align-items-center mb-3">
-
-                                                        <div class="bg-success rounded-lg d-flex align-items-center justify-content-center"
-                                                            style="width: 40px; height: 40px;">
-                                                            <i class="fas fa-check text-white"></i>
-                                                        </div>
-
-                                                        <div class="ms-3">
-                                                            <div class="fw-bold">
-                                                                Tanlangan fayllar:
-                                                                <span id="fileCount">0</span> ta
-                                                            </div>
-
-                                                            <div class="text-muted small">
-                                                                Barcha fayllar bitta Excel faylga birlashtiriladi
-                                                            </div>
-                                                        </div>
-
-                                                    </div>
-
-                                                    <div id="fileList" class="list-group"></div>
-
-                                                </div>
-
-                                                <div class="d-grid gap-2 mt-4">
-                                                    <button id="uploadBtn" type="submit"
-                                                        class="btn btn-primary btn-lg py-3" disabled>
-                                                        <i class="fas fa-upload me-2"></i>
-                                                        <span id="btnText">Avval fayl tanlang</span>
-                                                    </button>
-                                                </div>
-                                            </form>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
+    <div class="row g-4">
+        <div class="col-lg-8">
+            <div class="card action-card">
+                <div class="card-body">
+                    <div class="action-head">
+                        <span class="icon-tile"><i class="fas fa-file-excel"></i></span>
+                        <div>
+                            <h2>Fayllarni formatlash</h2>
+                            <p>Bir yoki bir nechta E-Ombor faylini tanlang — ular formatlanib, bitta Excel fayl sifatida yuklab olinadi.</p>
                         </div>
                     </div>
+
+                    <form id="uploadForm" enctype="multipart/form-data">
+                        @csrf
+
+                        <div class="upload-area dropzone" id="uploadArea">
+                            <i class="fas fa-cloud-arrow-up"></i>
+                            <div class="dropzone-file">Excel fayllarni bu yerga tashlang</div>
+                            <div class="small">yoki tanlash uchun bosing · .xlsx, .xls, .csv</div>
+                            <div class="small">Bir vaqtning o'zida bir nechta fayl tanlash mumkin</div>
+                            <input type="file" id="fileInput" name="excel_files[]"
+                                   accept=".xlsx,.xls,.csv" class="d-none" multiple>
+                        </div>
+
+                        <div id="fileInfo" class="mt-3 p-3 bg-body-tertiary rounded-3 d-none">
+                            <div class="d-flex align-items-center gap-2 mb-3">
+                                <span class="icon-tile" style="width: 32px; height: 32px; font-size: 0.875rem;">
+                                    <i class="fas fa-check"></i>
+                                </span>
+                                <div>
+                                    <div class="fw-semibold">Tanlangan fayllar: <span id="fileCount">0</span> ta</div>
+                                    <div class="text-muted small">Barcha fayllar bitta Excel faylga birlashtiriladi</div>
+                                </div>
+                            </div>
+                            <div id="fileList" class="list-group"></div>
+                        </div>
+
+                        <button id="uploadBtn" type="submit" class="btn btn-primary w-100 py-2 mt-3" disabled>
+                            <i class="fas fa-download me-1"></i>
+                            <span id="btnText">Avval fayl tanlang</span>
+                        </button>
+                    </form>
                 </div>
             </div>
         </div>
     </div>
-    </div>
-    </div>
-    <script>
+@endsection
+
+@push('scripts')
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11.14.5"></script>
+<script>
         const uploadArea = document.getElementById('uploadArea');
         const fileInput = document.getElementById('fileInput');
         const fileInfo = document.getElementById('fileInfo');
@@ -481,6 +339,4 @@
 
             });
     </script>
-</body>
-
-</html>
+@endpush
