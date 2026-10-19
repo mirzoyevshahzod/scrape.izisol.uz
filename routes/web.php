@@ -26,41 +26,41 @@ Route::middleware('auth')->group(function () {
     })->name('home');
 
     // Eombor scraping routes
-    Route::get('/scrape-eombor', [EomborScrapeController::class, 'index'])->name('scrape.eombor');
-    Route::post('/scrape-eombor', [EomborScrapeController::class, 'scrape'])->name('scrape.eombor.process');
+    Route::get('/scrape-eombor', [EomborScrapeController::class, 'index'])->name('scrape.eombor')->middleware('permission:page.eombor-scrape');
+    Route::post('/scrape-eombor', [EomborScrapeController::class, 'scrape'])->name('scrape.eombor.process')->middleware('permission:page.eombor-scrape');
 
     //Mintrans license
-    Route::get('/mintrans-litsenziya', [HomeController::class, 'mintrans'])->name('index');
+    Route::get('/mintrans-litsenziya', [HomeController::class, 'mintrans'])->name('index')->middleware('permission:page.mintrans-license');
     //Mintrans Avtoraqam
-    Route::get('/mintrans-auto', [HomeController::class, 'mintransAuto'])->name('upload.index');
+    Route::get('/mintrans-auto', [HomeController::class, 'mintransAuto'])->name('upload.index')->middleware('permission:page.mintrans-auto');
     //Belarus scraping
-    Route::get('/belarus', [HomeController::class, 'belarus'])->name('scrape.data');
+    Route::get('/belarus', [HomeController::class, 'belarus'])->name('scrape.data')->middleware('permission:page.belarus');
     //Qozoq scraping
-    Route::get('/qozoq', [QozoqController::class, 'index'])->name('qozoq.index');
-    Route::get('/check-qozoq', [HomeController::class, 'checkQozoq'])->name('check.qozoq');
+    Route::get('/qozoq', [QozoqController::class, 'index'])->name('qozoq.index')->middleware('permission:page.qozoq');
+    Route::get('/check-qozoq', [HomeController::class, 'checkQozoq'])->name('check.qozoq')->middleware('permission:page.check-qozoq');
     //Zitic scraping
-    Route::get('/zitic', [HomeController::class, 'zitic'])->name('zitic.index');
+    Route::get('/zitic', [HomeController::class, 'zitic'])->name('zitic.index')->middleware('permission:page.zitic');
 
     //Orginfo scraping
-    Route::get('/orginfo', [HomeController::class, 'orginfo'])->name('orginfo.index');
+    Route::get('/orginfo', [HomeController::class, 'orginfo'])->name('orginfo.index')->middleware('permission:page.orginfo');
 
     //Zanjeer scraping
-    Route::get('/zanjeer', [HomeController::class, 'scrapeZanjeer'])->name('zanjeer.index');
+    Route::get('/zanjeer', [HomeController::class, 'scrapeZanjeer'])->name('zanjeer.index')->middleware('permission:page.zanjeer');
     // turkey scraper routes
-    Route::get('/turkey', [HomeController::class, 'turkey'])->name('turkey.index');
-    Route::get('/autos', [HomeController::class, 'autos'])->name('autos.index');
+    Route::get('/turkey', [HomeController::class, 'turkey'])->name('turkey.index')->middleware('permission:page.turkey');
+    Route::get('/autos', [HomeController::class, 'autos'])->name('autos.index')->middleware('permission:page.autos');
 
-    Route::get('/upload-zanjeer-file', [HomeController::class, 'uploadZanjeer'])->name('upload-zanjeer');
+    Route::get('/upload-zanjeer-file', [HomeController::class, 'uploadZanjeer'])->name('upload-zanjeer')->middleware('permission:page.upload-zanjeer');
 
-    Route::get('/e-ombor-converter', [HomeController::class, 'eOmborConverter'])->name('eOmborConverter');
+    Route::get('/e-ombor-converter', [HomeController::class, 'eOmborConverter'])->name('eOmborConverter')->middleware('permission:page.eombor-converter');
 
-    Route::get('/turkiya-converter', [HomeController::class, 'turkiyaConverter'])->name('turkiyaConverter');
+    Route::get('/turkiya-converter', [HomeController::class, 'turkiyaConverter'])->name('turkiyaConverter')->middleware('permission:page.turkiya-converter');
 
-    Route::get('/zitic-converter', [HomeController::class, 'ziticConverter'])->name('ziticConverter');
+    Route::get('/zitic-converter', [HomeController::class, 'ziticConverter'])->name('ziticConverter')->middleware('permission:page.zitic-converter');
 
-    Route::get('/declarant-converter', [HomeController::class, 'declarantConverter'])->name('declarantConverter');
+    Route::get('/declarant-converter', [HomeController::class, 'declarantConverter'])->name('declarantConverter')->middleware('permission:page.declarant-converter');
 
-    Route::get('/filter-uzbek-car-number', [HomeController::class, 'filterUzbekCarNumber'])->name('filterUzbekCarNumber');
+    Route::get('/filter-uzbek-car-number', [HomeController::class, 'filterUzbekCarNumber'])->name('filterUzbekCarNumber')->middleware('permission:page.uzbek-plates');
 
-    Route::get('/merge-excel-files', [HomeController::class, 'mergeExcelFiles'])->name('mergeExcelFiles');
+    Route::get('/merge-excel-files', [HomeController::class, 'mergeExcelFiles'])->name('mergeExcelFiles')->middleware('permission:page.merge-excel');
 });

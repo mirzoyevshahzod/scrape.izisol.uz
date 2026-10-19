@@ -118,70 +118,102 @@
                         Scraping Loyihalar
                     </div>
                     <nav class="nav flex-column">
+                         @can('page.autos')
                          <a class="nav-link" href="/autos" target="_blank" id="nav-page4">
                             <i class="fas fa-globe-europe me-2"></i>
                             Autos
                         </a>
+                         @endcan
+                         @can('page.mintrans-auto')
                          <a class="nav-link" href="/mintrans-auto" target="_blank" id="nav-page3">
                             <i class="fas fa-search me-2"></i>
                             Mintrans Avtoraqam
                         </a>
+                         @endcan
+                           @can('page.qozoq')
                            <a class="nav-link" href="/qozoq" target="_blank" id="nav-page6">
                             <i class="fas fa-file-alt me-2"></i>
                             Qozoq Scraper
                         </a>
+                           @endcan
+                        @can('page.check-qozoq')
                         <a class="nav-link" href="/check-qozoq" target="_blank" id="nav-page6">
                             <i class="fas fa-file-alt me-2"></i>
                             Qozoq Tekshirilgan
                         </a>
+                        @endcan
+                        @can('page.belarus')
                         <a class="nav-link" href="/belarus" target="_blank" id="nav-page4">
                             <i class="fas fa-globe-europe me-2"></i>
                             Belarus Litva
                         </a>
+                        @endcan
+                        @can('page.turkey')
                         <a class="nav-link" href="/turkey" target="_blank" id="nav-page5">
                             <i class="fas fa-flag me-2"></i>
                             Turkiya Gruziya
                         </a>
+                        @endcan
+                        @can('page.zitic')
                         <a class="nav-link" href="/zitic" target="_blank" id="nav-page7">
                             <i class="fas fa-download me-2"></i>
                             Zitic Scraper
                         </a>
+                        @endcan
+                        @can('page.zanjeer')
                         <a class="nav-link" href="/zanjeer" target="_blank" id="nav-page4">
                             <i class="fas fa-globe-europe me-2"></i>
                             Zanjeer Scraper
                         </a>
+                        @endcan
+                        @can('page.orginfo')
                         <a class="nav-link" href="/orginfo" target="_blank" id="nav-page7">
                             <i class="fas fa-download me-2"></i>
                             Orginfo Scraper
                         </a>
+                        @endcan
+                        @can('page.upload-zanjeer')
                         <a class="nav-link" href="{{ route('upload-zanjeer') }}" target="_blank" id="nav-page7">
                             <i class="fas fa-download me-2"></i>
                             Qozoq Tekshirilgan Converter
                         </a>
+                        @endcan
+                        @can('page.eombor-converter')
                         <a class="nav-link" href="{{ route('eOmborConverter') }}" target="_blank" id="nav-page7">
                             <i class="fas fa-download me-2"></i>
                             E Ombor Converter
                         </a>
+                        @endcan
+                        @can('page.turkiya-converter')
                         <a class="nav-link" href="{{ route('turkiyaConverter') }}" target="_blank" id="nav-page7">
                             <i class="fas fa-download me-2"></i>
                             Turkiya Converter
                         </a>
+                        @endcan
+                        @can('page.zitic-converter')
                         <a class="nav-link" href="{{ route('ziticConverter') }}" target="_blank" id="nav-page7">
                             <i class="fas fa-download me-2"></i>
                             Zitic Converter
                         </a>
+                        @endcan
+                        @can('page.declarant-converter')
                         <a class="nav-link" href="{{ route('declarantConverter') }}" target="_blank" id="nav-page7">
                             <i class="fas fa-download me-2"></i>
                             Declarant Converter
                         </a>
+                        @endcan
+                        @can('page.uzbek-plates')
                         <a class="nav-link" href="{{ route('filterUzbekCarNumber') }}" target="_blank" id="nav-page7">
                             <i class="fas fa-download me-2"></i>
                             Uzbek Car Number Filter
                         </a>
+                        @endcan
+                        @can('page.merge-excel')
                         <a class="nav-link" href="{{ route('mergeExcelFiles') }}" target="_blank" id="nav-page7">
                             <i class="fas fa-object-group me-2"></i>
                             Excel Fayllarni Birlashtirish
                         </a>
+                        @endcan
                     </nav>
                 </div>
             </div>
