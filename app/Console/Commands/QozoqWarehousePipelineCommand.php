@@ -6,6 +6,7 @@ use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use PhpOffice\PhpSpreadsheet\IOFactory;
 
 class QozoqWarehousePipelineCommand extends Command
 {
@@ -62,33 +63,35 @@ class QozoqWarehousePipelineCommand extends Command
             return Command::FAILURE;
         }
 
-        $checkedFileName = 'qozoq_' . now()->format('Y-m-d_H-i-s') . '_tekshirilgan.xlsx';
-        $tmpDir = storage_path('app/tmp');
+        // Avval bu fayl o'z saytimizdagi /api/upload-qozoq'ga HTTP orqali
+        // yuborilardi — SSL sertifikati eskirsa yoki sayt ishlamay qolsa
+        // pipeline shu yerda yiqilardi. Endpoint faqat sarlavhani tekshirib,
+        // faylni import_qozoq/ ga ko'chirgani uchun, shuni shu yerning o'zida
+        // qilamiz.
+        $importDir = storage_path('app/import_qozoq');
 
-        if (!file_exists($tmpDir)) {
-            mkdir($tmpDir, 0777, true);
+        if (!file_exists($importDir)) {
+            mkdir($importDir, 0777, true);
         }
 
-        $checkedTmpPath = $tmpDir . '/' . $checkedFileName;
+        $importedQozoqFile = $importDir . '/qozoq_' . now()->format('Y-m-d_H-i-s') . '_tekshirilgan.xlsx';
 
-        file_put_contents($checkedTmpPath, $exportResponse->body());
+        file_put_contents($importedQozoqFile, $exportResponse->body());
 
-        $this->info("Tekshirilgan fayl yuklab olindi: {$checkedTmpPath}");
+        $expectedHeaders = ['Chegara nomi', 'Mashina raqami', 'Sana va vaqt', 'Status', 'Company', 'Telefon'];
 
-        $uploadResponse = Http::timeout(60)
-            ->attach('excel', file_get_contents($checkedTmpPath), $checkedFileName)
-            ->post(rtrim(config('app.url'), '/') . '/api/upload-qozoq');
+        try {
+            $headers = IOFactory::load($importedQozoqFile)->getActiveSheet()->rangeToArray('A1:F1')[0];
+        } catch (\Throwable $e) {
+            $headers = null;
+        }
 
-        @unlink($checkedTmpPath);
-
-        if (!$uploadResponse->successful()) {
-            Log::error('upload-qozoq failed', ['response' => $uploadResponse->body()]);
-            $this->error('upload-qozoq xato: ' . $uploadResponse->body());
+        if ($headers !== $expectedHeaders) {
+            @unlink($importedQozoqFile);
+            Log::error('Warehouse qozoq export formati noto\'g\'ri', ['headers' => $headers]);
+            $this->error('Warehouse export fayli formati noto\'g\'ri (sarlavhalar mos emas).');
             return Command::FAILURE;
         }
-
-        $uploadedFileName = $uploadResponse->json('file_name');
-        $importedQozoqFile = storage_path('app/import_qozoq/' . $uploadedFileName);
 
         $this->info("Tekshirilgan fayl saqlandi: {$importedQozoqFile}");
 
@@ -184,7 +187,7 @@ class QozoqWarehousePipelineCommand extends Command
             ['endpoint' => 'api/import-eksport-qozoq/import', 'file' => $this->latestFile(storage_path('app/qozoq'), 'kazakhstan-china-*.xlsx')],
             ['endpoint' => 'api/turkey/import', 'file' => $this->latestFile(storage_path('app/turkey'), 'turkey_scrape-*.xlsx')],
             ['endpoint' => 'api/belarus-benyakoni/import', 'file' => $this->latestFile(storage_path('app/declarant'), 'benyakoni-*.xlsx')],
-            ['endpoint' => 'api/belarus-komenii/import', 'file' => $this->latestFile(storage_path('app/declarant'), 'kamennii-log-*.xlsx')],
+            ['endpoint' => 'api/belarus-komennii/import', 'file' => $this->latestFile(storage_path('app/declarant'), 'kamennii-log-*.xlsx')],
         ];
 
         foreach ($imports as $item) {
