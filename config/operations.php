@@ -10,6 +10,7 @@
 |
 | 'date' => true bo'lgan amallar ishga tushirishdan oldin kunni so'raydi;
 | tanlangan kun har bir buyruqqa --date=YYYY-MM-DD sifatida beriladi.
+| 'fields' — qo'shimcha tanlovlar (App\Support\Operations\OperationFields).
 |
 | Qoldau checkpoint'lari va declarant zonalari routes/console.php'dagi
 | 06:00 jadvali bilan umumiy — "Barcha scraping" tugmasi aynan jadvaldagi
@@ -56,10 +57,25 @@ return [
 
         'telegram' => [
             'label' => 'Telegram\'ga yuborish',
-            'description' => 'Tanlangan kun fayllarini Manager ustuni bilan Telegram chat\'larga yuboradi. Bugun yuborilganlar takrorlanmaydi.',
+            'description' => 'Tanlangan kun fayllarini (hammasini yoki bittasini) Manager ustuni bilan Telegram chat\'larga yuboradi.',
             'icon' => 'fa-paper-plane',
             'permission' => 'operation.telegram',
             'date' => true,
+            'fields' => [
+                'only' => [
+                    'type' => 'select',
+                    'label' => 'Qaysi fayl?',
+                    'empty' => 'Hammasi',
+                    'option' => '--only',
+                    'choices' => [\App\Console\Commands\SendDailyFilesToTelegram::class, 'fileChoices'],
+                ],
+                'force' => [
+                    'type' => 'checkbox',
+                    'label' => 'Bugun yuborilgan bo\'lsa ham qayta yuborish',
+                    'tag' => 'qayta',
+                    'option' => '--force',
+                ],
+            ],
             'commands' => [
                 ['telegram:send-daily-files', []],
             ],

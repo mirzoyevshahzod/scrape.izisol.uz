@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Models\JobRun;
 use App\Support\Operations\JobRunOutput;
+use App\Support\Operations\OperationFields;
 use App\Support\Operations\ScheduleLock;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -45,7 +46,11 @@ class RunOperationJob implements ShouldQueue
 
         foreach (self::commandsFor($this->run) as [$command, $parameters]) {
             $display = trim($command . ' ' . implode(' ', array_map(
-                fn ($key, $value) => str_starts_with((string) $key, '--') ? "{$key}={$value}" : "\"{$value}\"",
+                fn ($key, $value) => match (true) {
+                    $value === true => (string) $key,
+                    str_starts_with((string) $key, '--') => "{$key}={$value}",
+                    default => "\"{$value}\"",
+                },
                 array_keys($parameters),
                 $parameters
             )));
@@ -85,17 +90,25 @@ class RunOperationJob implements ShouldQueue
 
     /**
      * Amalning buyruqlari; ishga tushirishda kun tanlangan bo'lsa, har
-     * biriga --date=YYYY-MM-DD qo'shiladi.
+     * biriga --date=YYYY-MM-DD, qo'shimcha maydonlar tanlangan bo'lsa
+     * tegishli opsiyalari (masalan --only=zitic --force) qo'shiladi.
      *
      * @return array<int,array{0:string,1:array}>
      */
     public static function commandsFor(JobRun $run): array
     {
-        $date = $run->params['date'] ?? null;
+        $operation = config("operations.operations.{$run->operation}", []);
+        $params = $run->params ?? [];
+
+        $options = OperationFields::options($operation, $params);
+
+        if (! empty($params['date'])) {
+            $options = ['--date' => $params['date']] + $options;
+        }
 
         return array_map(
-            fn ($command) => [$command[0], $date ? $command[1] + ['--date' => $date] : $command[1]],
-            config("operations.operations.{$run->operation}.commands", [])
+            fn ($command) => [$command[0], $command[1] + $options],
+            $operation['commands'] ?? []
         );
     }
 

@@ -22,7 +22,9 @@ use Illuminate\Support\Facades\Artisan;
  * buni ko'rsatadi.
  *
  * `--date=YYYY-MM-DD` berilsa, bugungi emas, o'sha kunning fayllari
- * (nomida shu sana bor eng oxirgisi) yuboriladi.
+ * (nomida shu sana bor eng oxirgisi) yuboriladi. `--only=zitic,...` faqat
+ * tanlangan fayllarni, `--force` esa bugun allaqachon yuborilganlarini ham
+ * qayta yuboradi (Boshqaruv sahifasidan bitta faylni qayta yuborish uchun).
  *
  * `enrich` belgilangan fayllar yuborishdan oldin `crm:plate-operators`
  * orqali "Manager" ustuni bilan boyitilib, kompaniya bo'yicha saralanadi.
@@ -33,29 +35,37 @@ use Illuminate\Support\Facades\Artisan;
 class SendDailyFilesToTelegram extends Command
 {
     protected $signature = 'telegram:send-daily-files
-                            {--date= : Shu kun (YYYY-MM-DD) fayllarini yuborish. Bo\'sh bo\'lsa — bugungi fayllar}';
+                            {--date= : Shu kun (YYYY-MM-DD) fayllarini yuborish. Bo\'sh bo\'lsa — bugungi fayllar}
+                            {--only= : Faqat shu fayl(lar), vergul bilan: zitic, turkey, benyakoni, kamennii-log, kazakhstan-china, qozoq-tekshirilgan, malumotlar}
+                            {--force : Bugun allaqachon yuborilgan bo\'lsa ham qayta yuborish}';
 
     protected $description = 'Kunlik scrape/warehouse fayllarini Telegram orqali belgilangan chatlarga yuboradi';
 
-    /** @var array<int,array{label:string,dir:string,pattern:string,chats:array<int,string>,enrich?:bool}> */
-    private array $items;
-
-    public function __construct()
+    /**
+     * Yuboriladigan fayllar, kalit bo'yicha (--only= va Boshqaruv'dagi tanlov shu kalitlarni ishlatadi).
+     *
+     * @return array<string,array{label:string,dir:string,pattern:string,chats:array<int,string>,enrich?:bool}>
+     */
+    public static function items(): array
     {
-        parent::__construct();
-
         $mainChats = ['75714317', '7510409703', '8776207278'];
         $finalChats = ['7510409703', '6757738816'];
 
-        $this->items = [
-            ['label' => 'Zitic', 'dir' => storage_path('app/zitic'), 'pattern' => 'zitic_*.xlsx', 'chats' => $mainChats, 'enrich' => true],
-            ['label' => 'Turkey', 'dir' => storage_path('app/turkey'), 'pattern' => 'turkey_scrape-*.xlsx', 'chats' => $mainChats, 'enrich' => true],
-            ['label' => 'Declarant (Benyakoni)', 'dir' => storage_path('app/declarant'), 'pattern' => 'benyakoni-*.xlsx', 'chats' => $mainChats, 'enrich' => true],
-            ['label' => 'Declarant (Kamennii Log)', 'dir' => storage_path('app/declarant'), 'pattern' => 'kamennii-log-*.xlsx', 'chats' => $mainChats, 'enrich' => true],
-            ['label' => 'Kazakhstan-China', 'dir' => storage_path('app/qozoq'), 'pattern' => 'kazakhstan-china-*.xlsx', 'chats' => $mainChats, 'enrich' => true],
-            ['label' => 'Qozoq tekshirilgan', 'dir' => storage_path('app/import_qozoq'), 'pattern' => 'qozoq_*_tekshirilgan.xlsx', 'chats' => $mainChats, 'enrich' => true],
-            ['label' => 'Yakuniy (merge + operator + INN)', 'dir' => storage_path('app/orginfo'), 'pattern' => 'malumotlar_*.xlsx', 'chats' => $finalChats],
+        return [
+            'zitic' => ['label' => 'Zitic', 'dir' => storage_path('app/zitic'), 'pattern' => 'zitic_*.xlsx', 'chats' => $mainChats, 'enrich' => true],
+            'turkey' => ['label' => 'Turkey', 'dir' => storage_path('app/turkey'), 'pattern' => 'turkey_scrape-*.xlsx', 'chats' => $mainChats, 'enrich' => true],
+            'benyakoni' => ['label' => 'Declarant (Benyakoni)', 'dir' => storage_path('app/declarant'), 'pattern' => 'benyakoni-*.xlsx', 'chats' => $mainChats, 'enrich' => true],
+            'kamennii-log' => ['label' => 'Declarant (Kamennii Log)', 'dir' => storage_path('app/declarant'), 'pattern' => 'kamennii-log-*.xlsx', 'chats' => $mainChats, 'enrich' => true],
+            'kazakhstan-china' => ['label' => 'Kazakhstan-China', 'dir' => storage_path('app/qozoq'), 'pattern' => 'kazakhstan-china-*.xlsx', 'chats' => $mainChats, 'enrich' => true],
+            'qozoq-tekshirilgan' => ['label' => 'Qozoq tekshirilgan', 'dir' => storage_path('app/import_qozoq'), 'pattern' => 'qozoq_*_tekshirilgan.xlsx', 'chats' => $mainChats, 'enrich' => true],
+            'malumotlar' => ['label' => 'Yakuniy (merge + operator + INN)', 'dir' => storage_path('app/orginfo'), 'pattern' => 'malumotlar_*.xlsx', 'chats' => $finalChats],
         ];
+    }
+
+    /** Boshqaruv sahifasidagi "Qaysi fayl" tanlovi uchun: kalit => nomi */
+    public static function fileChoices(): array
+    {
+        return array_map(fn ($item) => $item['label'], self::items());
     }
 
     public function handle(): int
@@ -68,6 +78,23 @@ class SendDailyFilesToTelegram extends Command
             return self::FAILURE;
         }
 
+        $items = self::items();
+
+        if ($only = $this->option('only')) {
+            $keys = array_map('trim', explode(',', $only));
+            $unknown = array_diff($keys, array_keys($items));
+
+            if ($unknown) {
+                $this->error("--only noto'g'ri: " . implode(', ', $unknown) . '. Mavjudlari: ' . implode(', ', array_keys($items)));
+
+                return self::FAILURE;
+            }
+
+            $items = array_intersect_key($items, array_flip($keys));
+        }
+
+        $force = (bool) $this->option('force');
+
         $sender = new TelegramSender();
         $today = $date ?? Carbon::now()->format('Y-m-d');
         $hasFailure = false;
@@ -76,7 +103,7 @@ class SendDailyFilesToTelegram extends Command
             $this->info("Sana: {$date}");
         }
 
-        foreach ($this->items as $item) {
+        foreach ($items as $item) {
             $file = DailyFiles::latest($item['dir'], $item['pattern'], $date);
 
             if (! $file) {
@@ -101,7 +128,7 @@ class SendDailyFilesToTelegram extends Command
             }
 
             foreach ($item['chats'] as $chatId) {
-                if (SentFilesTracker::alreadySent($chatId, $file)) {
+                if (! $force && SentFilesTracker::alreadySent($chatId, $file)) {
                     $this->line("{$item['label']}: {$chatId}'ga bugun allaqachon yuborilgan, o'tkazib yuborildi.");
 
                     continue;

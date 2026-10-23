@@ -274,4 +274,66 @@ class OperationsTest extends TestCase
     {
         $this->assertTrue(collect(app(Schedule::class)->events())->contains(fn ($e) => str_ends_with($e->command, 'crm:daily-import')));
     }
+
+    // --- Telegram: bitta faylni tanlash va qayta yuborish ---
+
+    public function test_telegram_single_file_and_force_are_stored_and_passed(): void
+    {
+        Queue::fake();
+        $this->actingAs($this->superAdmin());
+        $day = today()->subDay()->format('Y-m-d');
+
+        $this->postJson('/operations/telegram/run', ['date' => $day, 'only' => 'zitic', 'force' => true])
+            ->assertStatus(202)
+            ->assertJsonPath('run.tags', ['Zitic', 'qayta']);
+
+        $run = JobRun::sole();
+        $this->assertSame(['date' => $day, 'only' => 'zitic', 'force' => true], $run->params);
+
+        [[$command, $parameters]] = RunOperationJob::commandsFor($run);
+        $this->assertSame('telegram:send-daily-files', $command);
+        $this->assertSame(['--date' => $day, '--only' => 'zitic', '--force' => true], $parameters);
+    }
+
+    public function test_telegram_all_files_without_force_adds_no_options(): void
+    {
+        Queue::fake();
+        $this->actingAs($this->superAdmin());
+        $day = today()->format('Y-m-d');
+
+        $this->postJson('/operations/telegram/run', ['date' => $day, 'only' => '', 'force' => false])->assertStatus(202);
+
+        $run = JobRun::sole();
+        $this->assertSame(['date' => $day], $run->params);
+        $this->assertSame([['telegram:send-daily-files', ['--date' => $day]]], RunOperationJob::commandsFor($run));
+    }
+
+    public function test_telegram_rejects_unknown_file(): void
+    {
+        Queue::fake();
+        $this->actingAs($this->superAdmin());
+
+        $this->postJson('/operations/telegram/run', ['date' => today()->format('Y-m-d'), 'only' => 'nope'])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('only');
+        $this->assertSame(0, JobRun::count());
+    }
+
+    public function test_telegram_file_choices_include_zitic_and_qozoq_tekshirilgan(): void
+    {
+        $choices = \App\Console\Commands\SendDailyFilesToTelegram::fileChoices();
+
+        $this->assertSame('Zitic', $choices['zitic']);
+        $this->assertSame('Qozoq tekshirilgan', $choices['qozoq-tekshirilgan']);
+
+        $this->actingAs($this->superAdmin());
+        $this->get('/operations')->assertOk()->assertSee('qozoq-tekshirilgan');
+    }
+
+    public function test_telegram_command_rejects_unknown_only_value(): void
+    {
+        $this->artisan('telegram:send-daily-files', ['--only' => 'zitic,nope'])
+            ->expectsOutputToContain("--only noto'g'ri: nope")
+            ->assertFailed();
+    }
 }

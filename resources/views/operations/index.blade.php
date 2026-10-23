@@ -23,15 +23,18 @@
         @foreach ($operations as $key => $operation)
             <div class="col-xxl col-xl-4 col-md-6">
                 <div class="card h-100" data-operation="{{ $key }}" data-needs-date="{{ empty($operation['date']) ? '0' : '1' }}"
-                     data-description="{{ $operation['description'] }}" data-icon="{{ $operation['icon'] }}">
+                     data-description="{{ $operation['description'] }}" data-icon="{{ $operation['icon'] }}"
+                     data-fields="{{ json_encode($operation['fields'] ?: new stdClass, JSON_UNESCAPED_UNICODE) }}">
                     <div class="card-body d-flex flex-column">
                         <div class="d-flex align-items-center gap-3 mb-3">
                             <span class="icon-tile"><i class="fas {{ $operation['icon'] }}"></i></span>
                             <h5 class="mb-0 fs-6 fw-semibold">{{ $operation['label'] }}</h5>
                         </div>
                         <p class="text-muted small flex-grow-1">{{ $operation['description'] }}</p>
-                        @if (! empty($operation['date']))
-                            <div class="small text-muted mb-2"><i class="fas fa-calendar-day me-1"></i>Ishga tushirishda kun so'raladi</div>
+                        @if (! empty($operation['date']) || $operation['fields'])
+                            <div class="small text-muted mb-2">
+                                <i class="fas fa-calendar-day me-1"></i>Ishga tushirishda {{ $operation['fields'] ? 'kun va fayl' : 'kun' }} so'raladi
+                            </div>
                         @endif
                         <div class="small mb-3 op-last text-muted">Hali ishga tushirilmagan.</div>
                         <button type="button" class="btn btn-primary w-100 op-run" data-label="{{ $operation['label'] }}">
@@ -175,6 +178,55 @@
                 return { node: wrap, value: function () { return input.value; } };
             }
 
+            /** config'dagi qo'shimcha maydonlar: select (masalan "Qaysi fayl?") va checkbox */
+            function fieldsForm(fields) {
+                const wrap = el('div');
+                const getters = {};
+
+                Object.entries(fields).forEach(function ([name, field]) {
+                    const id = 'op-field-' + name;
+                    const group = el('div', 'mt-3');
+
+                    if (field.type === 'select') {
+                        const label = el('label', 'form-label', field.label);
+                        label.htmlFor = id;
+                        const select = el('select', 'form-select');
+                        select.id = id;
+                        const empty = el('option', null, field.empty || '—');
+                        empty.value = '';
+                        select.append(empty);
+                        Object.entries(field.choices).forEach(function ([value, text]) {
+                            const option = el('option', null, text);
+                            option.value = value;
+                            select.append(option);
+                        });
+                        group.append(label, select);
+                        getters[name] = function () { return select.value; };
+                    } else if (field.type === 'checkbox') {
+                        const check = el('div', 'form-check');
+                        const input = el('input', 'form-check-input');
+                        input.type = 'checkbox';
+                        input.id = id;
+                        const label = el('label', 'form-check-label', field.label);
+                        label.htmlFor = id;
+                        check.append(input, label);
+                        group.append(check);
+                        getters[name] = function () { return input.checked; };
+                    }
+
+                    wrap.append(group);
+                });
+
+                return {
+                    node: wrap,
+                    values: function () {
+                        const values = {};
+                        Object.keys(getters).forEach(function (name) { values[name] = getters[name](); });
+                        return values;
+                    },
+                };
+            }
+
             function duration(seconds) {
                 if (seconds === null || seconds === undefined) return '—';
                 seconds = Math.round(seconds);
@@ -200,6 +252,7 @@
                     last.append(badge(run.status), ' ');
                     last.append(el('span', null,
                         (run.date ? formatDay(run.date) + ' kuni uchun · ' : '') +
+                        (run.tags && run.tags.length ? run.tags.join(', ') + ' · ' : '') +
                         (run.finished_at || run.started_at || run.created_at) + (run.user ? ' · ' + run.user : '')));
                 });
             }
@@ -232,6 +285,9 @@
                     if (run.date) {
                         labelCell.append(el('span', 'badge bg-secondary-subtle text-secondary-emphasis ms-2', formatDay(run.date)));
                     }
+                    (run.tags || []).forEach(function (tag) {
+                        labelCell.append(el('span', 'badge bg-primary-subtle text-primary-emphasis ms-1', tag));
+                    });
 
                     row.append(
                         el('td', 'text-muted', run.id),
@@ -307,19 +363,32 @@
                     const card = button.closest('[data-operation]');
                     const operation = card.dataset.operation;
                     const picker = card.dataset.needsDate === '1' ? datePicker() : null;
+                    const fields = JSON.parse(card.dataset.fields || '{}');
+                    const extra = Object.keys(fields).length ? fieldsForm(fields) : null;
+
+                    let body = null;
+                    if (picker || extra) {
+                        body = el('div');
+                        if (picker) body.append(picker.node);
+                        if (extra) body.append(extra.node);
+                    }
 
                     uiConfirm({
                         title: '"' + button.dataset.label + '" ishga tushirilsinmi?',
                         message: card.dataset.description,
                         icon: card.dataset.icon,
                         confirmText: 'Ishga tushirish',
-                        body: picker ? picker.node : null,
+                        body: body,
                         onConfirm: async function () {
                             const payload = {};
 
                             if (picker) {
                                 if (!picker.value()) return 'Kunni tanlang.';
                                 payload.date = picker.value();
+                            }
+
+                            if (extra) {
+                                Object.assign(payload, extra.values());
                             }
 
                             const response = await fetch(urls.run + '/' + operation + '/run', {

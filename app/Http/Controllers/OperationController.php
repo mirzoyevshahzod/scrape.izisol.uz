@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Jobs\RunOperationJob;
 use App\Models\JobRun;
+use App\Support\Operations\OperationFields;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -19,7 +20,10 @@ class OperationController extends Controller
     public function index(Request $request): View
     {
         return view('operations.index', [
-            'operations' => $this->allowedOperations($request),
+            'operations' => array_map(
+                fn ($operation) => ['fields' => OperationFields::resolve($operation)] + $operation,
+                $this->allowedOperations($request)
+            ),
         ]);
     }
 
@@ -41,6 +45,12 @@ class OperationController extends Controller
                 'date.date_format' => 'Sana YYYY-MM-DD formatida bo\'lishi kerak.',
                 'date.before_or_equal' => 'Kelajakdagi kunni tanlab bo\'lmaydi.',
             ])['date'];
+        }
+
+        if (! empty($config['fields'])) {
+            $params += OperationFields::values($config, $request->validate(OperationFields::rules($config), [
+                'in' => 'Tanlangan qiymat noto\'g\'ri.',
+            ]));
         }
 
         // Tugma ikki marta tez bosilsa ham bitta amal ikki marta navbatga
@@ -117,6 +127,7 @@ class OperationController extends Controller
             'operation' => $run->operation,
             'label' => config("operations.operations.{$run->operation}.label", $run->operation),
             'date' => $run->params['date'] ?? null,
+            'tags' => OperationFields::tags(config("operations.operations.{$run->operation}", []), $run->params ?? []),
             'status' => $stale ? 'stale' : $run->status,
             'active' => $isActive && ! $stale,
             'user' => $run->user?->name,
