@@ -68,7 +68,7 @@ Route::middleware('auth')->group(function () {
 
     // Boshqaruv: queue orqali amallarni ishga tushirish (har bir amal o'z permission'ini controller'da tekshiradi)
     Route::prefix('operations')->name('operations.')
-        ->middleware('permission:operation.crm-login|operation.pipeline|operation.telegram|operation.scraping')
+        ->middleware('permission:operation.crm-login|operation.pipeline|operation.telegram|operation.crm-import|operation.scraping')
         ->group(function () {
             Route::get('/', [OperationController::class, 'index'])->name('index');
             Route::get('/runs', [OperationController::class, 'runs'])->name('runs');

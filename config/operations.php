@@ -8,6 +8,9 @@
 | Har bir amal queue orqali (RunOperationJob, "operations" navbati)
 | ketma-ket ishga tushiriladigan artisan buyruqlari ro'yxati.
 |
+| 'date' => true bo'lgan amallar ishga tushirishdan oldin kunni so'raydi;
+| tanlangan kun har bir buyruqqa --date=YYYY-MM-DD sifatida beriladi.
+|
 | Qoldau checkpoint'lari va declarant zonalari routes/console.php'dagi
 | 06:00 jadvali bilan umumiy — "Barcha scraping" tugmasi aynan jadvaldagi
 | buyruqlarni ishga tushiradi.
@@ -42,9 +45,10 @@ return [
 
         'pipeline' => [
             'label' => 'Pipeline',
-            'description' => 'Warehouse import/export, merge va yakuniy fayl (qozoq:warehouse-pipeline).',
+            'description' => 'Tanlangan kun fayllari bilan warehouse import/export, merge va yakuniy fayl (qozoq:warehouse-pipeline).',
             'icon' => 'fa-project-diagram',
             'permission' => 'operation.pipeline',
+            'date' => true,
             'commands' => [
                 ['qozoq:warehouse-pipeline', []],
             ],
@@ -52,11 +56,23 @@ return [
 
         'telegram' => [
             'label' => 'Telegram\'ga yuborish',
-            'description' => 'Bugungi fayllarni Manager ustuni bilan Telegram chat\'larga yuboradi. Avval yuborilganlar takrorlanmaydi.',
+            'description' => 'Tanlangan kun fayllarini Manager ustuni bilan Telegram chat\'larga yuboradi. Bugun yuborilganlar takrorlanmaydi.',
             'icon' => 'fa-paper-plane',
             'permission' => 'operation.telegram',
+            'date' => true,
             'commands' => [
                 ['telegram:send-daily-files', []],
+            ],
+        ],
+
+        'crm-import' => [
+            'label' => 'CRM import',
+            'description' => 'Tanlangan kun fayllarini (Kazakhstan-Russia, Turkey, Zitic, Declarant) formatlab, Zanjeer CRM\'ga import qiladi (crm:daily-import).',
+            'icon' => 'fa-file-import',
+            'permission' => 'operation.crm-import',
+            'date' => true,
+            'commands' => [
+                ['crm:daily-import', []],
             ],
         ],
 

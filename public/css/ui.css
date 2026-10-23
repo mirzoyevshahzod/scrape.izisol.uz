@@ -646,3 +646,57 @@ body {
     font-size: 0.875rem;
     margin: 2px 0 0;
 }
+
+/* ---------- Tasdiqlash oynasi va toast (public/js/ui.js) ---------- */
+.ui-confirm {
+    max-width: 440px;
+}
+
+.ui-confirm-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
+    background: var(--ui-primary-soft);
+    color: var(--ui-primary);
+    font-size: 1.15rem;
+}
+
+.ui-confirm-icon.is-danger {
+    background: rgba(var(--bs-danger-rgb), 0.12);
+    color: var(--bs-danger);
+}
+
+.min-w-0 {
+    min-width: 0;
+}
+
+.ui-toast {
+    --bs-toast-bg: var(--ui-surface);
+    --bs-toast-border-color: var(--ui-border);
+    --bs-toast-max-width: 380px;
+    box-shadow: var(--ui-shadow-lg);
+    border-radius: 10px;
+}
+
+/* Kun tanlash (Boshqaruv) */
+.day-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 10px;
+}
+
+.day-chips .btn {
+    --bs-btn-padding-y: 0.25rem;
+    --bs-btn-padding-x: 0.7rem;
+    --bs-btn-font-size: 0.8125rem;
+}
+
+.day-chips .btn.active {
+    background: var(--ui-primary-soft);
+    border-color: rgba(var(--ui-primary-rgb), 0.5);
+    color: var(--ui-primary);
+}

@@ -68,7 +68,7 @@
                                     </a>
                                     @unless ($user->is(auth()->user()))
                                         <form method="POST" action="{{ route('admin.users.destroy', $user) }}" class="d-inline"
-                                              data-confirm="{{ $user->email }} o'chirilsinmi?" onsubmit="return confirm(this.dataset.confirm);">
+                                              data-confirm="{{ $user->email }} o'chirilsinmi?" data-confirm-title="O'chirishni tasdiqlang" data-confirm-variant="danger" data-confirm-button="O'chirish">
                                             @csrf
                                             @method('DELETE')
                                             <button class="btn btn-sm btn-light text-danger" title="O'chirish"><i class="fas fa-trash"></i></button>

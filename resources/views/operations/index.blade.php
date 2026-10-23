@@ -21,14 +21,18 @@
 
     <div class="row g-4 mb-4">
         @foreach ($operations as $key => $operation)
-            <div class="col-xl-3 col-md-6">
-                <div class="card h-100" data-operation="{{ $key }}">
+            <div class="col-xxl col-xl-4 col-md-6">
+                <div class="card h-100" data-operation="{{ $key }}" data-needs-date="{{ empty($operation['date']) ? '0' : '1' }}"
+                     data-description="{{ $operation['description'] }}" data-icon="{{ $operation['icon'] }}">
                     <div class="card-body d-flex flex-column">
                         <div class="d-flex align-items-center gap-3 mb-3">
                             <span class="icon-tile"><i class="fas {{ $operation['icon'] }}"></i></span>
                             <h5 class="mb-0 fs-6 fw-semibold">{{ $operation['label'] }}</h5>
                         </div>
                         <p class="text-muted small flex-grow-1">{{ $operation['description'] }}</p>
+                        @if (! empty($operation['date']))
+                            <div class="small text-muted mb-2"><i class="fas fa-calendar-day me-1"></i>Ishga tushirishda kun so'raladi</div>
+                        @endif
                         <div class="small mb-3 op-last text-muted">Hali ishga tushirilmagan.</div>
                         <button type="button" class="btn btn-primary w-100 op-run" data-label="{{ $operation['label'] }}">
                             <i class="fas fa-play me-1"></i>Ishga tushirish
@@ -87,6 +91,9 @@
                 run: @json(url('operations')),
             };
 
+            // "Bugun" serverning vaqt zonasi bo'yicha (brauzerniki boshqa bo'lishi mumkin)
+            const TODAY = @json(today()->format('Y-m-d'));
+
             const STATUS = {
                 queued: ['bg-secondary-subtle text-secondary-emphasis', 'Navbatda'],
                 running: ['bg-primary-subtle text-primary-emphasis', 'Ishlayapti'],
@@ -115,6 +122,59 @@
                 return node;
             }
 
+            // "2026-10-20" -> "20.10.2026"
+            function formatDay(day) {
+                if (!day) return '';
+                const [y, m, d] = day.split('-');
+                return d + '.' + m + '.' + y;
+            }
+
+            function shiftDay(day, delta) {
+                const date = new Date(day + 'T00:00:00');
+                date.setDate(date.getDate() + delta);
+                const pad = function (n) { return String(n).padStart(2, '0'); };
+                return date.getFullYear() + '-' + pad(date.getMonth() + 1) + '-' + pad(date.getDate());
+            }
+
+            /** Oynadagi kun tanlash maydoni: <input type=date> + "Bugun/Kecha/2 kun oldin" */
+            function datePicker() {
+                const wrap = el('div');
+                const label = el('label', 'form-label', 'Qaysi kun uchun?');
+                label.htmlFor = 'op-date';
+                const input = el('input', 'form-control');
+                input.type = 'date';
+                input.id = 'op-date';
+                input.max = TODAY;
+                input.value = TODAY;
+                input.required = true;
+
+                const chips = el('div', 'day-chips');
+                const options = [['Bugun', 0], ['Kecha', -1], ['2 kun oldin', -2]];
+                const buttons = options.map(function ([text, delta]) {
+                    const button = el('button', 'btn btn-light', text);
+                    button.type = 'button';
+                    button.dataset.day = shiftDay(TODAY, delta);
+                    button.addEventListener('click', function () {
+                        input.value = button.dataset.day;
+                        sync();
+                    });
+                    return button;
+                });
+                chips.append.apply(chips, buttons);
+
+                const hint = el('div', 'form-text', 'Nomida shu sana bor fayllar ishlatiladi.');
+
+                function sync() {
+                    buttons.forEach(function (button) { button.classList.toggle('active', button.dataset.day === input.value); });
+                }
+
+                input.addEventListener('input', sync);
+                sync();
+
+                wrap.append(label, input, chips, hint);
+                return { node: wrap, value: function () { return input.value; } };
+            }
+
             function duration(seconds) {
                 if (seconds === null || seconds === undefined) return '—';
                 seconds = Math.round(seconds);
@@ -138,7 +198,9 @@
                     }
 
                     last.append(badge(run.status), ' ');
-                    last.append(el('span', null, (run.finished_at || run.started_at || run.created_at) + (run.user ? ' · ' + run.user : '')));
+                    last.append(el('span', null,
+                        (run.date ? formatDay(run.date) + ' kuni uchun · ' : '') +
+                        (run.finished_at || run.started_at || run.created_at) + (run.user ? ' · ' + run.user : '')));
                 });
             }
 
@@ -166,9 +228,14 @@
                     button.addEventListener('click', function () { openOutput(run.id, run.label); });
                     actions.append(button);
 
+                    const labelCell = el('td', null, run.label);
+                    if (run.date) {
+                        labelCell.append(el('span', 'badge bg-secondary-subtle text-secondary-emphasis ms-2', formatDay(run.date)));
+                    }
+
                     row.append(
                         el('td', 'text-muted', run.id),
-                        el('td', null, run.label),
+                        labelCell,
                         statusCell,
                         el('td', 'd-none d-md-table-cell', run.user || 'jadval'),
                         el('td', 'text-muted small d-none d-sm-table-cell', run.started_at || run.created_at),
@@ -216,7 +283,7 @@
                 if (atBottom) pre.scrollTop = pre.scrollHeight;
 
                 const title = document.getElementById('output-title');
-                title.replaceChildren(document.createTextNode('#' + run.id + ' ' + run.label + ' '), badge(run.status));
+                title.replaceChildren(document.createTextNode('#' + run.id + ' ' + run.label + (run.date ? ' · ' + formatDay(run.date) : '') + ' '), badge(run.status));
 
                 if (run.active) {
                     setTimeout(loadOutput, 3000);
@@ -236,26 +303,42 @@
             });
 
             document.querySelectorAll('.op-run').forEach(function (button) {
-                button.addEventListener('click', async function () {
-                    const operation = button.closest('[data-operation]').dataset.operation;
+                button.addEventListener('click', function () {
+                    const card = button.closest('[data-operation]');
+                    const operation = card.dataset.operation;
+                    const picker = card.dataset.needsDate === '1' ? datePicker() : null;
 
-                    if (!confirm('"' + button.dataset.label + '" ishga tushirilsinmi?')) return;
+                    uiConfirm({
+                        title: '"' + button.dataset.label + '" ishga tushirilsinmi?',
+                        message: card.dataset.description,
+                        icon: card.dataset.icon,
+                        confirmText: 'Ishga tushirish',
+                        body: picker ? picker.node : null,
+                        onConfirm: async function () {
+                            const payload = {};
 
-                    button.disabled = true;
+                            if (picker) {
+                                if (!picker.value()) return 'Kunni tanlang.';
+                                payload.date = picker.value();
+                            }
 
-                    try {
-                        const response = await fetch(urls.run + '/' + operation + '/run', {
-                            method: 'POST',
-                            headers: { Accept: 'application/json' },
-                        });
-                        const data = await response.json().catch(function () { return {}; });
+                            const response = await fetch(urls.run + '/' + operation + '/run', {
+                                method: 'POST',
+                                headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+                                body: JSON.stringify(payload),
+                            });
+                            const data = await response.json().catch(function () { return {}; });
 
-                        if (!response.ok) {
-                            alert(data.message || 'Xatolik: HTTP ' + response.status);
-                        }
-                    } finally {
-                        refresh();
-                    }
+                            if (!response.ok) {
+                                const firstError = data.errors ? Object.values(data.errors)[0][0] : null;
+                                return firstError || data.message || 'Xatolik: HTTP ' + response.status;
+                            }
+
+                            uiToast(data.message || 'Navbatga qo\'shildi.', 'success');
+                            refresh();
+                            return true;
+                        },
+                    });
                 });
             });
 

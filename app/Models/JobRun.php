@@ -26,11 +26,12 @@ class JobRun extends Model
     /** Bazada saqlanadigan natijaning maksimal hajmi (oxirgi qismi qoldiriladi) */
     public const MAX_OUTPUT_BYTES = 200_000;
 
-    protected $fillable = ['operation', 'status', 'user_id', 'output', 'started_at', 'finished_at'];
+    protected $fillable = ['operation', 'status', 'user_id', 'params', 'output', 'started_at', 'finished_at'];
 
     protected function casts(): array
     {
         return [
+            'params' => 'array',
             'started_at' => 'datetime',
             'finished_at' => 'datetime',
         ];

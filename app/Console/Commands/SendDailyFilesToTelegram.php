@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Support\DailyFiles;
 use App\Support\Telegram\PipelineStatus;
 use App\Support\Telegram\SentFilesTracker;
 use App\Support\Telegram\TelegramSender;
@@ -20,6 +21,9 @@ use Illuminate\Support\Facades\Artisan;
  * xato sifatida yozadi, shunda `telegram:daily-status` kunlik hisobotda
  * buni ko'rsatadi.
  *
+ * `--date=YYYY-MM-DD` berilsa, bugungi emas, o'sha kunning fayllari
+ * (nomida shu sana bor eng oxirgisi) yuboriladi.
+ *
  * `enrich` belgilangan fayllar yuborishdan oldin `crm:plate-operators`
  * orqali "Manager" ustuni bilan boyitilib, kompaniya bo'yicha saralanadi.
  * Asl fayllarga tegilmaydi (ularni warehouse import va crm:daily-import
@@ -28,7 +32,8 @@ use Illuminate\Support\Facades\Artisan;
  */
 class SendDailyFilesToTelegram extends Command
 {
-    protected $signature = 'telegram:send-daily-files';
+    protected $signature = 'telegram:send-daily-files
+                            {--date= : Shu kun (YYYY-MM-DD) fayllarini yuborish. Bo\'sh bo\'lsa — bugungi fayllar}';
 
     protected $description = 'Kunlik scrape/warehouse fayllarini Telegram orqali belgilangan chatlarga yuboradi';
 
@@ -55,22 +60,35 @@ class SendDailyFilesToTelegram extends Command
 
     public function handle(): int
     {
+        try {
+            $date = DailyFiles::parseDateOption($this->option('date'));
+        } catch (\InvalidArgumentException $e) {
+            $this->error($e->getMessage());
+
+            return self::FAILURE;
+        }
+
         $sender = new TelegramSender();
-        $today = Carbon::now()->format('Y-m-d');
+        $today = $date ?? Carbon::now()->format('Y-m-d');
         $hasFailure = false;
 
+        if ($date) {
+            $this->info("Sana: {$date}");
+        }
+
         foreach ($this->items as $item) {
-            $file = $this->latestFile($item['dir'], $item['pattern']);
+            $file = DailyFiles::latest($item['dir'], $item['pattern'], $date);
 
             if (! $file) {
-                $this->warn("{$item['label']}: fayl topilmadi ({$item['dir']}/{$item['pattern']}), o'tkazib yuborildi.");
-                PipelineStatus::recordFailure("telegram:send-daily-files [{$item['label']}]", 'Fayl umuman topilmadi.');
+                $this->warn("{$item['label']}: fayl topilmadi ({$item['dir']}/{$item['pattern']}" . ($date ? ", {$date}" : '') . "), o'tkazib yuborildi.");
+                PipelineStatus::recordFailure("telegram:send-daily-files [{$item['label']}]", $date ? "{$date} uchun fayl topilmadi." : 'Fayl umuman topilmadi.');
                 $hasFailure = true;
 
                 continue;
             }
 
-            if (Carbon::createFromTimestamp(filemtime($file))->format('Y-m-d') !== $today) {
+            // --date berilmagan (kundalik jadval) holatda eng oxirgi fayl bugungi bo'lishi shart
+            if (! $date && Carbon::createFromTimestamp(filemtime($file))->format('Y-m-d') !== $today) {
                 $this->warn("{$item['label']}: eng oxirgi fayl bugungi emas ({$file}), o'tkazib yuborildi.");
                 PipelineStatus::recordFailure("telegram:send-daily-files [{$item['label']}]", "Bugungi fayl topilmadi, eng oxirgisi: {$file}");
                 $hasFailure = true;
@@ -143,18 +161,5 @@ class SendDailyFilesToTelegram extends Command
         PipelineStatus::recordFailure("telegram:send-daily-files [{$label}]", 'crm:plate-operators muvaffaqiyatsiz — Manager ustunisiz yuborildi.');
 
         return $file;
-    }
-
-    private function latestFile(string $directory, string $pattern): ?string
-    {
-        $files = glob($directory . '/' . $pattern);
-
-        if (empty($files)) {
-            return null;
-        }
-
-        usort($files, fn ($a, $b) => filemtime($b) - filemtime($a));
-
-        return $files[0];
     }
 }

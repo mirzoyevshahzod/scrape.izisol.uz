@@ -30,9 +30,22 @@ class OperationController extends Controller
         abort_unless($config, 404);
         abort_unless($request->user()->can($config['permission']), 403);
 
+        // Kun so'raladigan amallar (config: 'date' => true) uchun sana majburiy
+        $params = [];
+
+        if (! empty($config['date'])) {
+            $params['date'] = $request->validate([
+                'date' => ['required', 'date_format:Y-m-d', 'before_or_equal:today'],
+            ], [
+                'date.required' => 'Kunni tanlang.',
+                'date.date_format' => 'Sana YYYY-MM-DD formatida bo\'lishi kerak.',
+                'date.before_or_equal' => 'Kelajakdagi kunni tanlab bo\'lmaydi.',
+            ])['date'];
+        }
+
         // Tugma ikki marta tez bosilsa ham bitta amal ikki marta navbatga
         // tushmasligi uchun tekshiruv va yaratish qulf ichida bajariladi.
-        $run = Cache::lock("operations:run:{$operation}", 10)->block(5, function () use ($operation, $request) {
+        $run = Cache::lock("operations:run:{$operation}", 10)->block(5, function () use ($operation, $request, $params) {
             if (JobRun::where('operation', $operation)->active()->exists()) {
                 return null;
             }
@@ -41,6 +54,7 @@ class OperationController extends Controller
                 'operation' => $operation,
                 'status' => JobRun::QUEUED,
                 'user_id' => $request->user()->id,
+                'params' => $params ?: null,
             ]);
         });
 
@@ -102,6 +116,7 @@ class OperationController extends Controller
             'id' => $run->id,
             'operation' => $run->operation,
             'label' => config("operations.operations.{$run->operation}.label", $run->operation),
+            'date' => $run->params['date'] ?? null,
             'status' => $stale ? 'stale' : $run->status,
             'active' => $isActive && ! $stale,
             'user' => $run->user?->name,

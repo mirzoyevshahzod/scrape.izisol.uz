@@ -42,6 +42,7 @@ final class Permissions
             'operation.crm-login' => 'CRM login',
             'operation.pipeline' => 'Pipeline\'ni ishga tushirish',
             'operation.telegram' => 'Telegram\'ga yuborish',
+            'operation.crm-import' => 'CRM\'ga kunlik import',
             'operation.scraping' => 'Barcha scraping\'ni ishga tushirish',
         ],
         'Administrator' => [

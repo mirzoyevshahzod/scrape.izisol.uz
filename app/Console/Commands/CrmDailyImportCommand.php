@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Support\Crm\CrmSession;
+use App\Support\DailyFiles;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Log;
@@ -25,11 +26,15 @@ class CrmDailyImportCommand extends Command
                             {--email= : .env dagi CRM_LOGIN_EMAIL o\'rniga ishlatiladi}
                             {--password= : .env dagi CRM_LOGIN_PASSWORD o\'rniga ishlatiladi}
                             {--timeout=60 : Har bir bosqich uchun kutish vaqti (soniya)}
-                            {--only= : Faqat shu bosqich(lar)ni ishga tushirish, vergul bilan ajratib (masalan: zitic,kazakhstan-russia). Bo\'sh bo\'lsa hammasi ishga tushadi}';
+                            {--only= : Faqat shu bosqich(lar)ni ishga tushirish, vergul bilan ajratib (masalan: zitic,kazakhstan-russia). Bo\'sh bo\'lsa hammasi ishga tushadi}
+                            {--date= : Shu kun (YYYY-MM-DD) fayllarini import qilish. Bo\'sh bo\'lsa — eng oxirgi fayllar}';
 
     protected $description = 'Qoldau/Turkey/Zitic/Declarant fayllarini formatlab, bitta CRM sessiyasida Zanjeer import qiladi';
 
     private array $results = [];
+
+    /** --date qiymati (null — eng oxirgi fayllar) */
+    private ?string $date = null;
 
     public function handle(): int
     {
@@ -44,6 +49,18 @@ class CrmDailyImportCommand extends Command
             $this->error('CRM_LOGIN_EMAIL va CRM_LOGIN_PASSWORD .env faylida (yoki --email= / --password= bilan) berilishi shart.');
 
             return self::FAILURE;
+        }
+
+        try {
+            $this->date = DailyFiles::parseDateOption($this->option('date'));
+        } catch (\InvalidArgumentException $e) {
+            $this->error($e->getMessage());
+
+            return self::FAILURE;
+        }
+
+        if ($this->date) {
+            $this->info("Sana: {$this->date}");
         }
 
         $timeout = (int) $this->option('timeout');
@@ -138,11 +155,11 @@ class CrmDailyImportCommand extends Command
     {
         $this->line('=== Kazakhstan - Russia (excel:split) ===');
 
-        $sourceFile = $this->latestFile(storage_path('app/qozoq'), 'kazakhstan-russia-*.xlsx');
+        $sourceFile = DailyFiles::latest(storage_path('app/qozoq'), 'kazakhstan-russia-*.xlsx', $this->date);
 
         if (! $sourceFile) {
             $this->warn('Kazakhstan-Russia qozoq fayli topilmadi, o\'tkazib yuborildi.');
-            $this->results[] = ['group' => 'Kazakhstan - Russia', 'border' => '-', 'status' => 'skip', 'message' => 'Manba fayl topilmadi'];
+            $this->results[] = ['group' => 'Kazakhstan - Russia', 'border' => '-', 'status' => 'skip', 'message' => 'Manba fayl topilmadi' . ($this->date ? " ({$this->date})" : '')];
 
             return;
         }
@@ -197,11 +214,11 @@ class CrmDailyImportCommand extends Command
     {
         $this->line('=== Turkey (excel:border-convert) ===');
 
-        $sourceFile = $this->latestFile(storage_path('app/turkey'), 'turkey_scrape-*.xlsx');
+        $sourceFile = DailyFiles::latest(storage_path('app/turkey'), 'turkey_scrape-*.xlsx', $this->date);
 
         if (! $sourceFile) {
             $this->warn('Turkey scrape fayli topilmadi, o\'tkazib yuborildi.');
-            $this->results[] = ['group' => 'Turkey', 'border' => 'Хопа-Сарпи', 'status' => 'skip', 'message' => 'Manba fayl topilmadi'];
+            $this->results[] = ['group' => 'Turkey', 'border' => 'Хопа-Сарпи', 'status' => 'skip', 'message' => 'Manba fayl topilmadi' . ($this->date ? " ({$this->date})" : '')];
 
             return;
         }
@@ -224,11 +241,11 @@ class CrmDailyImportCommand extends Command
     {
         $this->line('=== Zitic (zitic:convert) ===');
 
-        $sourceFile = $this->latestFile(storage_path('app/zitic'), 'zitic_*.xlsx');
+        $sourceFile = DailyFiles::latest(storage_path('app/zitic'), 'zitic_*.xlsx', $this->date);
 
         if (! $sourceFile) {
             $this->warn('Zitic scrape fayli topilmadi, o\'tkazib yuborildi.');
-            $this->results[] = ['group' => 'Zitic', 'border' => 'Владикавказ — Казбеги', 'status' => 'skip', 'message' => 'Manba fayl topilmadi'];
+            $this->results[] = ['group' => 'Zitic', 'border' => 'Владикавказ — Казбеги', 'status' => 'skip', 'message' => 'Manba fayl topilmadi' . ($this->date ? " ({$this->date})" : '')];
 
             return;
         }
@@ -259,11 +276,11 @@ class CrmDailyImportCommand extends Command
 
         foreach ($zones as $zone => $border) {
             try {
-                $sourceFile = $this->latestFile(storage_path('app/declarant'), $zone . '-*.xlsx');
+                $sourceFile = DailyFiles::latest(storage_path('app/declarant'), $zone . '-*.xlsx', $this->date);
 
                 if (! $sourceFile) {
                     $this->warn("{$zone} fayli topilmadi, o'tkazib yuborildi.");
-                    $this->results[] = ['group' => 'Declarant', 'border' => $border, 'status' => 'skip', 'message' => 'Manba fayl topilmadi'];
+                    $this->results[] = ['group' => 'Declarant', 'border' => $border, 'status' => 'skip', 'message' => 'Manba fayl topilmadi' . ($this->date ? " ({$this->date})" : '')];
 
                     continue;
                 }
@@ -329,19 +346,6 @@ class CrmDailyImportCommand extends Command
         }
 
         return $dir . '/' . $prefix . '_' . now()->format('Y-m-d_H-i-s') . '.xlsx';
-    }
-
-    private function latestFile(string $directory, string $pattern): ?string
-    {
-        $files = glob($directory . '/' . $pattern);
-
-        if (empty($files)) {
-            return null;
-        }
-
-        usort($files, fn ($a, $b) => filemtime($b) - filemtime($a));
-
-        return $files[0];
     }
 
     private function deleteDirectory(string $dir): void

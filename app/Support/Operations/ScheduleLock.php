@@ -14,6 +14,10 @@ use Illuminate\Support\ProcessUtils;
  *  - jadval bo'yicha shu buyruq hozir ishlayotgan bo'lsa, acquire() false;
  *  - aks holda mutex egallanadi va jadval shu vaqt ichida uni o'tkazib yuboradi.
  *
+ * Jadvaldagi vazifani topishda `--date` kabi opsiyalar (kalitlari "--"
+ * bilan boshlanadi) hisobga olinmaydi: `crm:daily-import --date=...` ham
+ * jadvaldagi `crm:daily-import` bilan bir qulfni ishlatadi.
+ *
  * Mutex kaliti buyruq satriga (PHP binary yo'li bilan) bog'liq — shuning
  * uchun queue worker cron'dagi `schedule:run` bilan bir xil PHP binary'da
  * ishga tushirilishi kerak.
@@ -43,6 +47,8 @@ class ScheduleLock
 
     private static function findEvent(string $command, array $parameters): ?Event
     {
+        $parameters = array_filter($parameters, fn ($key) => ! str_starts_with((string) $key, '--'), ARRAY_FILTER_USE_KEY);
+
         $expected = trim(Application::formatCommandString($command) . ' ' . implode(' ', array_map(
             fn ($value) => ProcessUtils::escapeArgument((string) $value),
             array_values($parameters)

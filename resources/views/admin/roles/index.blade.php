@@ -47,7 +47,7 @@
                                             <i class="fas fa-pen"></i>
                                         </a>
                                         <form method="POST" action="{{ route('admin.roles.destroy', $role) }}" class="d-inline"
-                                              data-confirm="&quot;{{ $role->name }}&quot; roli o'chirilsinmi?" onsubmit="return confirm(this.dataset.confirm);">
+                                              data-confirm="&quot;{{ $role->name }}&quot; roli o'chirilsinmi?" data-confirm-title="O'chirishni tasdiqlang" data-confirm-variant="danger" data-confirm-button="O'chirish">
                                             @csrf
                                             @method('DELETE')
                                             <button class="btn btn-sm btn-light text-danger" title="O'chirish"><i class="fas fa-trash"></i></button>

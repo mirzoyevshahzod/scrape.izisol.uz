@@ -43,8 +43,12 @@ class RunOperationJob implements ShouldQueue
         $output = new JobRunOutput($this->run);
         $failed = false;
 
-        foreach (config("operations.operations.{$this->run->operation}.commands", []) as [$command, $parameters]) {
-            $display = trim($command . ' ' . implode(' ', array_map(fn ($v) => "\"{$v}\"", $parameters)));
+        foreach (self::commandsFor($this->run) as [$command, $parameters]) {
+            $display = trim($command . ' ' . implode(' ', array_map(
+                fn ($key, $value) => str_starts_with((string) $key, '--') ? "{$key}={$value}" : "\"{$value}\"",
+                array_keys($parameters),
+                $parameters
+            )));
             $output->writeln("\n▶ php artisan {$display}  [" . now()->format('H:i:s') . ']');
 
             $lock = new ScheduleLock($command, $parameters);
@@ -80,12 +84,28 @@ class RunOperationJob implements ShouldQueue
     }
 
     /**
+     * Amalning buyruqlari; ishga tushirishda kun tanlangan bo'lsa, har
+     * biriga --date=YYYY-MM-DD qo'shiladi.
+     *
+     * @return array<int,array{0:string,1:array}>
+     */
+    public static function commandsFor(JobRun $run): array
+    {
+        $date = $run->params['date'] ?? null;
+
+        return array_map(
+            fn ($command) => [$command[0], $date ? $command[1] + ['--date' => $date] : $command[1]],
+            config("operations.operations.{$run->operation}.commands", [])
+        );
+    }
+
+    /**
      * Timeout yoki worker xatosi — ish "ishlayapti" holatida qolib ketmasin
      * va egallangan jadval mutex'lari bo'shatilsin.
      */
     public function failed(?Throwable $exception): void
     {
-        foreach (config("operations.operations.{$this->run->operation}.commands", []) as [$command, $parameters]) {
+        foreach (self::commandsFor($this->run) as [$command, $parameters]) {
             (new ScheduleLock($command, $parameters))->release();
         }
 

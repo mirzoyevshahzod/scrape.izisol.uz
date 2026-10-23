@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Support\DailyFiles;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Http;
@@ -10,7 +11,11 @@ use PhpOffice\PhpSpreadsheet\IOFactory;
 
 class QozoqWarehousePipelineCommand extends Command
 {
-    protected $signature = 'qozoq:warehouse-pipeline';
+    protected $signature = 'qozoq:warehouse-pipeline
+                            {--date= : Shu kun (YYYY-MM-DD) fayllari bilan ishlash. Bo\'sh bo\'lsa — eng oxirgi fayllar va bugungi sana}';
+
+    /** --date qiymati (null — eng oxirgi fayllar, bugungi sana) */
+    private ?string $date = null;
 
     protected $description = 'Qoldau Kazakhstan-Russia faylini warehouse orqali tekshirtirib, boshqa scrape fayllar bilan birlashtiradi';
 
@@ -18,10 +23,21 @@ class QozoqWarehousePipelineCommand extends Command
     {
         set_time_limit(0);
 
-        $sourceFile = $this->latestFile(storage_path('app/qozoq'), 'kazakhstan-russia-*.xlsx');
+        try {
+            $this->date = DailyFiles::parseDateOption($this->option('date'));
+        } catch (\InvalidArgumentException $e) {
+            $this->error($e->getMessage());
+            return Command::FAILURE;
+        }
+
+        if ($this->date) {
+            $this->info("Sana: {$this->date}");
+        }
+
+        $sourceFile = DailyFiles::latest(storage_path('app/qozoq'), 'kazakhstan-russia-*.xlsx', $this->date);
 
         if (!$sourceFile) {
-            $this->error('Kazakhstan-Russia qozoq fayli topilmadi. Avval "qoldau:scrape \'Kazakhstan - Russia\'" ishga tushirilishi kerak.');
+            $this->error('Kazakhstan-Russia qozoq fayli topilmadi' . ($this->date ? " ({$this->date} uchun)" : '') . '. Avval "qoldau:scrape \'Kazakhstan - Russia\'" ishga tushirilishi kerak.');
             return Command::FAILURE;
         }
 
@@ -54,7 +70,7 @@ class QozoqWarehousePipelineCommand extends Command
         $exportResponse = Http::withToken($token)
             ->timeout(120)
             ->get("{$baseUrl}/api/qozoq/export", [
-                'date' => now()->format('Y-m-d'),
+                'date' => $this->day(),
             ]);
 
         if (!$exportResponse->successful()) {
@@ -74,7 +90,7 @@ class QozoqWarehousePipelineCommand extends Command
             mkdir($importDir, 0777, true);
         }
 
-        $importedQozoqFile = $importDir . '/qozoq_' . now()->format('Y-m-d_H-i-s') . '_tekshirilgan.xlsx';
+        $importedQozoqFile = $importDir . '/qozoq_' . $this->day() . '_' . now()->format('H-i-s') . '_tekshirilgan.xlsx';
 
         file_put_contents($importedQozoqFile, $exportResponse->body());
 
@@ -97,18 +113,18 @@ class QozoqWarehousePipelineCommand extends Command
 
         $mergeFiles = array_values(array_filter([
             $importedQozoqFile,
-            $this->latestFile(storage_path('app/declarant'), 'benyakoni-*.xlsx'),
-            $this->latestFile(storage_path('app/declarant'), 'kamennii-log-*.xlsx'),
-            $this->latestFile(storage_path('app/declarant'), 'kozlovichi-*.xlsx'),
-            $this->latestFile(storage_path('app/zitic'), 'zitic_*.xlsx'),
-            $this->latestFile(storage_path('app/turkey'), 'turkey_scrape-*.xlsx'),
+            DailyFiles::latest(storage_path('app/declarant'), 'benyakoni-*.xlsx', $this->date),
+            DailyFiles::latest(storage_path('app/declarant'), 'kamennii-log-*.xlsx', $this->date),
+            DailyFiles::latest(storage_path('app/declarant'), 'kozlovichi-*.xlsx', $this->date),
+            DailyFiles::latest(storage_path('app/zitic'), 'zitic_*.xlsx', $this->date),
+            DailyFiles::latest(storage_path('app/turkey'), 'turkey_scrape-*.xlsx', $this->date),
         ]));
 
         if (count($mergeFiles) < 2) {
             $this->warn('Merge uchun fayllar yetarli emas, faqat topilganlar bilan davom etiladi.');
         }
 
-        $outputName = 'merged-' . now()->format('Y-m-d_H-i-s') . '.xlsx';
+        $outputName = 'merged-' . $this->day() . '_' . now()->format('H-i-s') . '.xlsx';
 
         $this->info('Fayllar birlashtirilmoqda: ' . implode(', ', $mergeFiles));
 
@@ -164,7 +180,7 @@ class QozoqWarehousePipelineCommand extends Command
                 mkdir($orginfoDir, 0777, true);
             }
 
-            $finalOutput = $orginfoDir . '/malumotlar_' . now()->format('Y-m-d') . '.xlsx';
+            $finalOutput = $orginfoDir . '/malumotlar_' . $this->day() . '.xlsx';
 
             Artisan::call('excel:fill-inn', [
                 'file' => $operatorsFile,
@@ -182,12 +198,12 @@ class QozoqWarehousePipelineCommand extends Command
     private function importAdditionalFiles(string $token, string $baseUrl): void
     {
         $imports = [
-            ['endpoint' => 'api/import-qozoq/import', 'file' => $this->latestFile(storage_path('app/qozoq'), 'kazakhstan-uzbekistan-*.xlsx')],
-            ['endpoint' => 'api/import-eksport-qozoq/import', 'file' => $this->latestFile(storage_path('app/qozoq'), 'kazakhstan-kyrgyzstan-*.xlsx')],
-            ['endpoint' => 'api/import-eksport-qozoq/import', 'file' => $this->latestFile(storage_path('app/qozoq'), 'kazakhstan-china-*.xlsx')],
-            ['endpoint' => 'api/turkey/import', 'file' => $this->latestFile(storage_path('app/turkey'), 'turkey_scrape-*.xlsx')],
-            ['endpoint' => 'api/belarus-benyakoni/import', 'file' => $this->latestFile(storage_path('app/declarant'), 'benyakoni-*.xlsx')],
-            ['endpoint' => 'api/belarus-komennii/import', 'file' => $this->latestFile(storage_path('app/declarant'), 'kamennii-log-*.xlsx')],
+            ['endpoint' => 'api/import-qozoq/import', 'file' => DailyFiles::latest(storage_path('app/qozoq'), 'kazakhstan-uzbekistan-*.xlsx', $this->date)],
+            ['endpoint' => 'api/import-eksport-qozoq/import', 'file' => DailyFiles::latest(storage_path('app/qozoq'), 'kazakhstan-kyrgyzstan-*.xlsx', $this->date)],
+            ['endpoint' => 'api/import-eksport-qozoq/import', 'file' => DailyFiles::latest(storage_path('app/qozoq'), 'kazakhstan-china-*.xlsx', $this->date)],
+            ['endpoint' => 'api/turkey/import', 'file' => DailyFiles::latest(storage_path('app/turkey'), 'turkey_scrape-*.xlsx', $this->date)],
+            ['endpoint' => 'api/belarus-benyakoni/import', 'file' => DailyFiles::latest(storage_path('app/declarant'), 'benyakoni-*.xlsx', $this->date)],
+            ['endpoint' => 'api/belarus-komennii/import', 'file' => DailyFiles::latest(storage_path('app/declarant'), 'kamennii-log-*.xlsx', $this->date)],
         ];
 
         foreach ($imports as $item) {
@@ -233,16 +249,13 @@ class QozoqWarehousePipelineCommand extends Command
         return $response->json('token');
     }
 
-    private function latestFile(string $directory, string $pattern): ?string
+    /**
+     * Ishlanayotgan kun: --date berilgan bo'lsa o'sha, aks holda bugun.
+     * Warehouse export'i va natija fayllarining nomlari shu sanaga bog'lanadi,
+     * shuning uchun keyin `telegram:send-daily-files --date=` ularni topa oladi.
+     */
+    private function day(): string
     {
-        $files = glob($directory . '/' . $pattern);
-
-        if (empty($files)) {
-            return null;
-        }
-
-        usort($files, fn ($a, $b) => filemtime($b) - filemtime($a));
-
-        return $files[0];
+        return $this->date ?? now()->format('Y-m-d');
     }
 }
