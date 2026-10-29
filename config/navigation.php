@@ -42,8 +42,6 @@ return [
                 'description' => 'Bazadagi avtomobillar ro\'yxati.'],
             ['label' => 'Mintrans Avtoraqam', 'route' => 'mintrans.index', 'match' => 'mintrans.*', 'icon' => 'fa-id-card', 'permission' => 'page.mintrans-auto',
                 'description' => 'Excel\'dagi avtoraqamlar bo\'yicha Mintrans litsenziya ma\'lumotlari.'],
-            ['label' => 'E-Ombor Scraping', 'route' => 'scrape.eombor', 'icon' => 'fa-warehouse', 'permission' => 'page.eombor-scrape',
-                'description' => 'E-Ombor ma\'lumotlarini yig\'ish.'],
         ],
     ],
     [

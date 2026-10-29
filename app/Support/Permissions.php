@@ -30,7 +30,6 @@ final class Permissions
             'page.orginfo' => 'Orginfo Scraper',
             'page.upload-zanjeer' => 'Qozoq Tekshirilgan Converter',
             'page.eombor-converter' => 'E Ombor Converter',
-            'page.eombor-scrape' => 'E Ombor Scraping',
             'page.turkiya-converter' => 'Turkiya Converter',
             'page.zitic-converter' => 'Zitic Converter',
             'page.declarant-converter' => 'Declarant Converter',

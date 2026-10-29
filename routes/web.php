@@ -8,7 +8,6 @@ use App\Http\Controllers\HomeController;
 use App\Http\Controllers\MintransController;
 use App\Http\Controllers\OperationController;
 use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\EomborScrapeController;
 use App\Http\Controllers\ScrapeController;
 use App\Http\Controllers\TurkeyScraperController;
 use App\Http\Controllers\API\QozoqController;
@@ -26,9 +25,6 @@ Route::middleware('auth')->group(function () {
     // Default index route
     Route::get('/', DashboardController::class)->name('home');
 
-    // Eombor scraping routes
-    Route::get('/scrape-eombor', [EomborScrapeController::class, 'index'])->name('scrape.eombor')->middleware('permission:page.eombor-scrape');
-    Route::post('/scrape-eombor', [EomborScrapeController::class, 'scrape'])->name('scrape.eombor.process')->middleware('permission:page.eombor-scrape');
     // Mintrans Avtoraqam: Excel -> Mintrans API -> natija Excel (queue orqali)
     Route::prefix('mintrans-auto')->name('mintrans.')->middleware('permission:page.mintrans-auto')->group(function () {
         Route::get('/', [MintransController::class, 'index'])->name('index');
