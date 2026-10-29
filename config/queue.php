@@ -39,7 +39,9 @@ return [
             'connection' => env('DB_QUEUE_CONNECTION'),
             'table' => env('DB_QUEUE_TABLE', 'jobs'),
             'queue' => env('DB_QUEUE', 'default'),
-            'retry_after' => (int) env('DB_QUEUE_RETRY_AFTER', 7200),
+            // RunOperationJob'ning eng uzun vaqt chegarasidan (Mintrans: 28800 s) katta bo'lishi kerak —
+            // aks holda uzoq ishlayotgan job "tiqilib qoldi" deb qayta olinadi
+            'retry_after' => (int) env('DB_QUEUE_RETRY_AFTER', 30000),
             'after_commit' => false,
         ],
 

@@ -28,6 +28,10 @@ class RunOperationJob implements ShouldQueue
     public int $tries = 1;
 
     /** config/queue.php'dagi retry_after (7200) dan kichik bo'lishi shart */
+    /**
+     * Standart vaqt chegarasi; amal config'ida 'timeout' bo'lsa — o'sha
+     * (masalan Mintrans: 8 soat). config/queue.php'dagi retry_after undan katta bo'lishi shart.
+     */
     public int $timeout = 7000;
 
     public bool $failOnTimeout = true;
@@ -35,6 +39,7 @@ class RunOperationJob implements ShouldQueue
     public function __construct(public JobRun $run)
     {
         $this->onQueue('operations');
+        $this->timeout = (int) config("operations.operations.{$run->operation}.timeout", $this->timeout);
     }
 
     public function handle(): void

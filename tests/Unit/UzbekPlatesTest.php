@@ -66,4 +66,14 @@ class UzbekPlatesTest extends TestCase
         $this->assertFalse(UzbekPlates::isPlate('01A123BC and more'));
         $this->assertFalse(UzbekPlates::isPlate('506695BA'));
     }
+
+    public function test_cyrillic_lookalike_letters_become_latin(): void
+    {
+        $this->assertSame(['01A210NA'], UzbekPlates::extract('01А210NA'));     // kirill А
+        $this->assertSame(['01261GDA'], UzbekPlates::extract('01261GDА'));     // oxirida kirill А
+        $this->assertSame(['01H211RC'], UzbekPlates::extract('01Н211RС'));     // kirill Н va С
+        $this->assertSame(['10C208NB'], UzbekPlates::extract('10 с 208 nb'));  // kichik kirill с -> lotin C
+        $this->assertSame([], UzbekPlates::extract('01516ЗPKA'));              // З lotinga o'xshamaydi
+        $this->assertTrue(UzbekPlates::isPlate('01А210NA'));
+    }
 }

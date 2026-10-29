@@ -32,6 +32,7 @@ Route::middleware('auth')->group(function () {
         Route::get('/runs', [MintransController::class, 'runs'])->name('runs');
         Route::get('/runs/{run}', [MintransController::class, 'show'])->name('show');
         Route::get('/runs/{run}/download', [MintransController::class, 'download'])->name('download');
+        Route::get('/runs/{run}/plates', [MintransController::class, 'plates'])->name('plates');
         Route::get('/ping', [MintransController::class, 'ping'])->name('ping');
         Route::get('/missing', [MintransController::class, 'missing'])->name('missing');
         Route::get('/missing/export', [MintransController::class, 'exportMissing'])->name('missing.export');

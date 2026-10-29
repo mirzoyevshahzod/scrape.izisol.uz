@@ -87,6 +87,8 @@ class MintransController extends Controller
                 'file' => "{$dir}/{$name}",
                 'original_name' => $originalName,
                 'result' => "{$resultDir}/mintrans_result_" . now()->format('Y_m_d_H_i_s') . '.xlsx',
+                // 1-bosqich A ustundan ajratgan avtoraqamlar ro'yxati (so'rovlardan oldin yoziladi)
+                'plates' => "{$resultDir}/raqamlar_" . now()->format('Y_m_d_H_i_s') . '.xlsx',
                 'skip_missing' => $request->boolean('skip_missing'),
             ];
 
@@ -147,6 +149,17 @@ class MintransController extends Controller
         abort_unless($file && is_file($file), 404, 'Natija fayli hali tayyor emas.');
 
         return response()->download($file, $run->params['download_name'] ?? basename($file));
+    }
+
+    /** 1-bosqich ajratgan avtoraqamlar ro'yxati — ish davomida ham yuklab olinadi */
+    public function plates(JobRun $run): BinaryFileResponse
+    {
+        abort_unless(in_array($run->operation, self::OPERATIONS, true), 404);
+
+        $file = $run->params['plates'] ?? null;
+        abort_unless($file && is_file($file), 404, 'Raqamlar ro\'yxati hali tayyor emas.');
+
+        return response()->download($file, basename($file));
     }
 
     public function ping(MintransClient $client): JsonResponse
@@ -223,6 +236,7 @@ class MintransController extends Controller
             'progress' => $run->params['progress'] ?? null,
             'inn' => $run->params['inn'] ?? null,
             'downloadable' => ! $isActive && $result && is_file($result),
+            'plates_ready' => ! empty($run->params['plates']) && is_file($run->params['plates']),
             'user' => $run->user?->name,
             'created_at' => $run->created_at?->format('Y-m-d H:i:s'),
             'started_at' => $run->started_at?->format('Y-m-d H:i:s'),

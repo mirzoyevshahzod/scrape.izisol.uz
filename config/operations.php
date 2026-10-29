@@ -99,8 +99,9 @@ return [
             'icon' => 'fa-id-card',
             'permission' => 'page.mintrans-auto',
             'hidden' => true,
+            'timeout' => 28800, // 8 soat: katta fayl (~7 600 raqam) 1–3-bosqichlarda ~4.5 soat
             'commands' => [
-                ['mintrans:scrape', ['file' => '{file}', '--output' => '{result}', '--run' => '{run}', '--skip-known-missing' => '{skip_missing}']],
+                ['mintrans:scrape', ['file' => '{file}', '--output' => '{result}', '--run' => '{run}', '--skip-known-missing' => '{skip_missing}', '--plates-output' => '{plates}']],
                 ['mintrans:clean-names', ['file' => '{result}']],
                 ['mintrans:inn', ['file' => '{result}', '--run' => '{run}']],
             ],
@@ -113,6 +114,7 @@ return [
             'icon' => 'fa-spell-check',
             'permission' => 'page.mintrans-auto',
             'hidden' => true,
+            'timeout' => 28800, // 8 soat: katta fayl (~7 600 raqam) 1–3-bosqichlarda ~4.5 soat
             'commands' => [
                 ['mintrans:clean-names', ['file' => '{file}', '--output' => '{result}']],
                 ['mintrans:inn', ['file' => '{result}', '--run' => '{run}']],
@@ -126,6 +128,7 @@ return [
             'icon' => 'fa-hashtag',
             'permission' => 'page.mintrans-auto',
             'hidden' => true,
+            'timeout' => 28800, // 8 soat: katta fayl (~7 600 raqam) 1–3-bosqichlarda ~4.5 soat
             'commands' => [
                 ['mintrans:inn', ['file' => '{file}', '--output' => '{result}', '--run' => '{run}']],
             ],

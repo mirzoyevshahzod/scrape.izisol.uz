@@ -203,6 +203,8 @@ class MintransTest extends TestCase
         $run = JobRun::sole();
         $this->assertSame('mintrans', $run->operation);
         $this->assertTrue($run->params['skip_missing']);
+        $this->assertStringStartsWith(storage_path('app/mintrans/results/raqamlar_'), $run->params['plates']);
+        $this->assertSame($run->params['plates'], RunOperationJob::commandsFor($run)[0][1]['--plates-output']);
         $this->assertFileExists($run->params['file']);
         $this->assertStringNotContainsString('raqamlar', $run->params['file']); // diskdagi nom foydalanuvchidan olinmaydi
         Queue::assertPushedOn('operations', RunOperationJob::class);
@@ -394,5 +396,43 @@ class MintransTest extends TestCase
         $this->post('/mintrans-auto/start', ['file' => $bad, 'stage' => 'inn'], ['Accept' => 'application/json'])->assertStatus(422);
 
         unlink($run->params['file']);
+    }
+
+    // --- katta fayllar ---
+
+    public function test_mintrans_runs_get_long_timeout_and_queue_retry_after_is_larger(): void
+    {
+        $this->assertSame(28800, (new RunOperationJob(new JobRun(['operation' => 'mintrans'])))->timeout);
+        $this->assertSame(28800, (new RunOperationJob(new JobRun(['operation' => 'mintrans-inn'])))->timeout);
+        $this->assertSame(7000, (new RunOperationJob(new JobRun(['operation' => 'pipeline'])))->timeout);
+
+        // retry_after har qanday amalning vaqt chegarasidan katta bo'lmasa, uzoq ish ikkinchi marta olinadi
+        $longest = max(array_map(fn ($op) => $op['timeout'] ?? 7000, config('operations.operations')));
+        $this->assertGreaterThan($longest, config('queue.connections.database.retry_after'));
+    }
+
+    public function test_plates_list_is_written_before_requests_and_downloadable(): void
+    {
+        $this->fakeApi();
+        $plates = "{$this->dir}/raqamlar.xlsx";
+
+        $this->artisan('mintrans:scrape', [
+            'file' => $this->inputFile(['Davlat raqami', '00000000020261710', '01А210NA', 'AA5433OH', '10S208NB']),
+            '--output' => "{$this->dir}/r.xlsx",
+            '--plates-output' => $plates,
+        ])
+            ->expectsOutputToContain("Fayldagi to'ldirilgan qatorlar: 5 ta")
+            ->expectsOutputToContain("Fayldagi O'zbekiston avtoraqamlari: 2 ta; raqam bo'lmagan yozuvlar tashlab yuborildi: 3 ta")
+            ->assertSuccessful();
+
+        $this->assertSame(['Davlat raqami', '01A210NA', '10S208NB'], array_column($this->rows($plates), 'A'));
+
+        $this->actingAs($this->user(['page.mintrans-auto']));
+        $run = JobRun::create(['operation' => 'mintrans', 'status' => JobRun::RUNNING, 'params' => ['original_name' => 'a.xlsx', 'plates' => $plates]]);
+        $this->getJson('/mintrans-auto/runs')->assertJsonPath('runs.0.plates_ready', true);
+        $this->get("/mintrans-auto/runs/{$run->id}/plates")->assertOk()->assertDownload('raqamlar.xlsx'); // ish davomida ham
+
+        $other = JobRun::create(['operation' => 'mintrans', 'status' => JobRun::RUNNING, 'params' => ['original_name' => 'b.xlsx']]);
+        $this->get("/mintrans-auto/runs/{$other->id}/plates")->assertNotFound();
     }
 }

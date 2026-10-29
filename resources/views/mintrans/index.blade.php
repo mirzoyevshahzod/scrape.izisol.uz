@@ -408,6 +408,14 @@
                     resultBtn.addEventListener('click', function () { openOutput(run.id, run.file); });
                     actions.append(resultBtn);
 
+                    if (run.plates_ready) {
+                        const platesLink = el('a', 'btn btn-sm btn-light ms-1');
+                        platesLink.href = urls.run + '/' + run.id + '/plates';
+                        platesLink.title = 'A ustundan ajratilgan O\'zbekiston avtoraqamlari';
+                        platesLink.append(el('i', 'fas fa-list-ol me-1'), document.createTextNode('Raqamlar'));
+                        actions.append(platesLink);
+                    }
+
                     if (run.downloadable) {
                         const link = el('a', 'btn btn-sm btn-primary ms-1');
                         link.href = urls.run + '/' + run.id + '/download';

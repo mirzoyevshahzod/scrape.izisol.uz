@@ -34,7 +34,8 @@ class MintransScrapeCommand extends Command
                             {--output= : Natija fayli (bo\'sh bo\'lsa storage/app/mintrans/results/mintrans_result_<vaqt>.xlsx)}
                             {--delay=300 : So\'rovlar orasidagi pauza, ms (davlat saytini yuklamaslik uchun kamida 300)}
                             {--skip-known-missing : Avval "topilmadi" deb yozilgan raqamlarni qayta so\'ramaslik}
-                            {--run= : Boshqaruv ishi (job_runs.id) — jarayon shu yozuvga yozib boriladi}';
+                            {--run= : Boshqaruv ishi (job_runs.id) — jarayon shu yozuvga yozib boriladi}
+                            {--plates-output= : Ajratilgan avtoraqamlar ro\'yxatini (so\'rovlardan oldin) shu Excel faylga yozish}';
 
     protected $description = 'Excel\'dagi O\'zbekiston avtoraqamlari bo\'yicha Mintrans litsenziya ma\'lumotlarini oladi (1-bosqich)';
 
@@ -74,8 +75,17 @@ class MintransScrapeCommand extends Command
         $delayMs = max(300, (int) $this->option('delay'));
         $run = $this->option('run') ? JobRun::find($this->option('run')) : null;
 
-        [$plates, $dropped] = $this->readPlates($file);
+        $this->info("1-bosqich: Mintrans'dan ma'lumot olish");
+
+        // ~300 ming qatorli faylni o'qish ~300 MB oladi
+        $this->ensureMemoryLimit(1024);
+
+        [$plates, $dropped, $rows] = $this->readPlates($file);
         $total = count($plates);
+
+        if ($this->option('plates-output')) {
+            $this->writePlates($plates, $this->option('plates-output'));
+        }
 
         $skipped = 0;
         if ($this->option('skip-known-missing') && $plates) {
@@ -84,7 +94,7 @@ class MintransScrapeCommand extends Command
             $skipped = $total - count($plates);
         }
 
-        $this->info("1-bosqich: Mintrans'dan ma'lumot olish");
+        $this->line("Fayldagi to'ldirilgan qatorlar: {$rows} ta");
         $this->line("Fayldagi O'zbekiston avtoraqamlari: {$total} ta; raqam bo'lmagan yozuvlar tashlab yuborildi: {$dropped} ta"
             . ($skipped ? "; avval topilmagani uchun o'tkazib yuborildi: {$skipped} ta" : ''));
 
@@ -147,16 +157,17 @@ class MintransScrapeCommand extends Command
     }
 
     /**
-     * A ustunidagi barcha raqamlar (kiritilish tartibida, takrorlarsiz) va
-     * raqam topilmagan bo'sh bo'lmagan kataklar soni.
+     * A ustunidagi barcha raqamlar (kiritilish tartibida, takrorlarsiz),
+     * raqam topilmagan va jami to'ldirilgan kataklar soni.
      *
-     * @return array{0:array<int,string>,1:int}
+     * @return array{0:array<int,string>,1:int,2:int}
      */
     private function readPlates(string $file): array
     {
         $sheet = IOFactory::load($file)->getActiveSheet();
         $plates = [];
         $dropped = 0;
+        $rows = 0;
 
         foreach ($sheet->getRowIterator() as $excelRow) {
             $value = trim((string) $sheet->getCell('A' . $excelRow->getRowIndex())->getFormattedValue());
@@ -164,6 +175,8 @@ class MintransScrapeCommand extends Command
             if ($value === '') {
                 continue;
             }
+
+            $rows++;
 
             $found = UzbekPlates::extract($value);
 
@@ -178,7 +191,45 @@ class MintransScrapeCommand extends Command
             }
         }
 
-        return [array_keys($plates), $dropped];
+        return [array_keys($plates), $dropped, $rows];
+    }
+
+    /** Ajratilgan raqamlar ro'yxati — uzoq jarayon boshlanishidan oldin tekshirib olish uchun */
+    private function writePlates(array $plates, string $path): void
+    {
+        $book = new Spreadsheet();
+        $sheet = $book->getActiveSheet();
+        $sheet->setCellValue('A1', 'Davlat raqami');
+        $sheet->getStyle('A1')->getFont()->setBold(true);
+        $sheet->getColumnDimension('A')->setWidth(16);
+
+        foreach ($plates as $i => $plate) {
+            $sheet->setCellValueExplicit('A' . ($i + 2), $plate, DataType::TYPE_STRING);
+        }
+
+        $this->save($book, $path);
+        $this->line('Raqamlar ro\'yxati: ' . $path);
+    }
+
+    /** CLI'da memory_limit kichik bo'lsa (masalan 128M) — kamida $mb MB gacha ko'taradi */
+    private function ensureMemoryLimit(int $mb): void
+    {
+        $current = ini_get('memory_limit');
+
+        if ($current === '-1') {
+            return;
+        }
+
+        $bytes = (int) $current * match (strtoupper(substr($current, -1))) {
+            'G' => 1024 ** 3,
+            'M' => 1024 ** 2,
+            'K' => 1024,
+            default => 1,
+        };
+
+        if ($bytes < $mb * 1024 ** 2) {
+            ini_set('memory_limit', "{$mb}M");
+        }
     }
 
     private function newBook(): Spreadsheet
