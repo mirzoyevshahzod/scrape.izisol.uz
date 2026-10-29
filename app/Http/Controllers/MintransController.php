@@ -22,15 +22,19 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  * Mintrans Avtoraqam sahifasi (permission: page.mintrans-auto).
  *
  * Yuklangan Excel queue'ga qo'yiladi (config/operations.php, RunOperationJob):
- *   "mintrans"        — 1-bosqich mintrans:scrape (Mintrans'dan ma'lumot,
- *                       topilmaganlar bazaga) + 2-bosqich mintrans:clean-names;
- *   "mintrans-names"  — faqat 2-bosqich: ma'lumoti bor Excel'da korxona
- *                       nomlarini OOO "NOMI" ko'rinishiga keltirish.
+ *   "mintrans"        — 1 -> 2 -> 3: mintrans:scrape (Mintrans'dan ma'lumot,
+ *                       topilmaganlar bazaga), mintrans:clean-names (nomlar
+ *                       OOO "NOMI"), mintrans:inn (orginfo.uz'dan INN);
+ *   "mintrans-names"  — 2 -> 3: ma'lumoti bor Excel'da nomlar + INN;
+ *   "mintrans-inn"    — faqat 3: nomlari formatlangan Excel'ga INN.
  */
 class MintransController extends Controller
 {
     /** bosqich => amal (config/operations.php) */
-    private const OPERATIONS = ['full' => 'mintrans', 'names' => 'mintrans-names'];
+    private const OPERATIONS = ['full' => 'mintrans', 'names' => 'mintrans-names', 'inn' => 'mintrans-inn'];
+
+    /** natija fayli nomiga qo'shimcha (2- va 3-bosqichdan boshlanganda) */
+    private const SUFFIXES = ['names' => '_formatlangan', 'inn' => '_inn'];
 
     public function index(): View
     {
@@ -43,7 +47,7 @@ class MintransController extends Controller
     {
         $request->validate([
             'file' => ['required', 'file', 'mimes:xlsx,xls,csv', 'max:10240'],
-            'stage' => ['nullable', 'in:full,names'],
+            'stage' => ['nullable', 'in:full,names,inn'],
             'skip_missing' => ['nullable', 'boolean'],
         ], [
             'file.required' => 'Excel faylni tanlang.',
@@ -55,8 +59,8 @@ class MintransController extends Controller
         $operation = self::OPERATIONS[$stage];
         $upload = $request->file('file');
 
-        // faqat 2-bosqich: "Korxona nomi" ustuni bo'lmasa — navbatga qo'ymasdan darhol aytamiz
-        if ($stage === 'names' && ! $this->hasCompanyColumn($upload->getRealPath())) {
+        // 2- yoki 3-bosqichdan: "Korxona nomi" ustuni bo'lmasa — navbatga qo'ymasdan darhol aytamiz
+        if ($stage !== 'full' && ! $this->hasCompanyColumn($upload->getRealPath())) {
             return response()->json([
                 'message' => 'Faylda "Korxona nomi" ustuni topilmadi.',
                 'errors' => ['file' => ['Faylning 1-qatorida "Korxona nomi" sarlavhali ustun bo\'lishi kerak.']],
@@ -71,13 +75,13 @@ class MintransController extends Controller
         $originalName = mb_substr($upload->getClientOriginalName(), 0, 150);
         $resultDir = storage_path('app/mintrans/results');
 
-        $params = $stage === 'names'
+        $params = $stage !== 'full'
             ? [
                 'file' => "{$dir}/{$name}",
                 'original_name' => $originalName,
                 'result' => "{$resultDir}/" . Str::uuid() . '.xlsx',
-                // yuklab olinganda: "<asl nom>_formatlangan.xlsx"
-                'download_name' => $this->safeBaseName($originalName) . '_formatlangan.xlsx',
+                // yuklab olinganda: "<asl nom>_formatlangan.xlsx" / "<asl nom>_inn.xlsx"
+                'download_name' => $this->safeBaseName($originalName) . self::SUFFIXES[$stage] . '.xlsx',
             ]
             : [
                 'file' => "{$dir}/{$name}",
@@ -102,15 +106,21 @@ class MintransController extends Controller
         if (! $run) {
             @unlink("{$dir}/{$name}");
 
-            return response()->json(['message' => $stage === 'names'
-                ? 'Nomlarni formatlash allaqachon ishlayapti — tugashini kuting.'
-                : 'Mintrans tekshiruvi allaqachon ishlayapti — tugashini kuting.'], 409);
+            return response()->json(['message' => match ($stage) {
+                'names' => 'Nomlarni formatlash allaqachon ishlayapti — tugashini kuting.',
+                'inn' => 'INN qo\'shish allaqachon ishlayapti — tugashini kuting.',
+                default => 'Mintrans tekshiruvi allaqachon ishlayapti — tugashini kuting.',
+            }], 409);
         }
 
         RunOperationJob::dispatch($run);
 
         return response()->json([
-            'message' => $stage === 'names' ? 'Fayl qabul qilindi, korxona nomlari formatlanmoqda.' : 'Fayl qabul qilindi, tekshiruv navbatga qo\'shildi.',
+            'message' => match ($stage) {
+                'names' => 'Fayl qabul qilindi: nomlar formatlanadi va INN qo\'shiladi.',
+                'inn' => 'Fayl qabul qilindi: orginfo.uz\'dan INN qo\'shilmoqda.',
+                default => 'Fayl qabul qilindi, tekshiruv navbatga qo\'shildi.',
+            },
             'run' => $this->present($run),
         ], 202);
     }
@@ -205,12 +215,13 @@ class MintransController extends Controller
 
         return [
             'id' => $run->id,
-            'stage' => $run->operation === self::OPERATIONS['names'] ? 'names' : 'full',
+            'stage' => array_search($run->operation, self::OPERATIONS, true) ?: 'full',
             'file' => $run->params['original_name'] ?? '—',
             'skip_missing' => (bool) ($run->params['skip_missing'] ?? false),
             'status' => $stale ? 'stale' : $run->status,
             'active' => $isActive && ! $stale,
             'progress' => $run->params['progress'] ?? null,
+            'inn' => $run->params['inn'] ?? null,
             'downloadable' => ! $isActive && $result && is_file($result),
             'user' => $run->user?->name,
             'created_at' => $run->created_at?->format('Y-m-d H:i:s'),

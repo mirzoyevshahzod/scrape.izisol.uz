@@ -77,15 +77,22 @@
                                 <label class="form-check stage-option">
                                     <input class="form-check-input" type="radio" name="stage" value="full" checked>
                                     <span class="form-check-label">
-                                        <b>1-bosqichdan</b> — Mintrans'dan ma'lumot olish va nomlarni formatlash
+                                        <b>1-bosqichdan</b> — Mintrans ma'lumoti, nomlarni formatlash va INN
                                         <span class="text-muted small d-block">A ustunida avtoraqamlar bo'lgan Excel.</span>
                                     </span>
                                 </label>
                                 <label class="form-check stage-option">
                                     <input class="form-check-input" type="radio" name="stage" value="names">
                                     <span class="form-check-label">
-                                        <b>Faqat 2-bosqich</b> — korxona nomlarini formatlash
-                                        <span class="text-muted small d-block">Ma'lumoti olingan Excel ("Korxona nomi" ustuni bor). Mintrans'ga so'rov yuborilmaydi.</span>
+                                        <b>2-bosqichdan</b> — korxona nomlarini formatlash va INN
+                                        <span class="text-muted small d-block">Mintrans ma'lumoti olingan Excel ("Korxona nomi" ustuni bor). Mintrans'ga so'rov yuborilmaydi.</span>
+                                    </span>
+                                </label>
+                                <label class="form-check stage-option">
+                                    <input class="form-check-input" type="radio" name="stage" value="inn">
+                                    <span class="form-check-label">
+                                        <b>Faqat 3-bosqich</b> — orginfo.uz'dan INN qo'shish
+                                        <span class="text-muted small d-block">Nomlari formatlangan Excel. Natija auto_import_template formatida (N: инн, O: Yangi telefon raqami).</span>
                                     </span>
                                 </label>
                             </div>
@@ -114,6 +121,7 @@
                     <div class="small text-muted border-top pt-3">
                         <div><b>1-bosqich:</b> har bir raqam Mintrans'dan so'raladi (0.3 s oraliq bilan); ma'lumoti chiqmaganlar bazaga yoziladi.</div>
                         <div><b>2-bosqich:</b> korxona nomlari tozalanadi va <code>OOO "NOMI"</code> ko'rinishiga keltiriladi.</div>
+                        <div><b>3-bosqich:</b> nom bo'yicha orginfo.uz'dan INN topiladi (faqat nomi aynan mos, faol tashkilot); topilmasa bo'sh qoladi.</div>
                     </div>
                 </div>
             </div>
@@ -247,6 +255,21 @@
                 return wrap;
             }
 
+            function innPills(inn) {
+                const wrap = el('div', 'd-flex flex-wrap gap-2');
+                if (!inn) return wrap;
+                [
+                    ['INN: nomlar', inn.done + ' / ' + inn.total],
+                    ['✅ INN topildi', inn.found],
+                    ['❌ topilmadi', inn.not_found],
+                ].concat(inn.errors ? [['⚠️ Xatolik', inn.errors]] : []).forEach(function ([label, value]) {
+                    const pill = el('span', 'stat-pill');
+                    pill.append(el('span', 'text-muted', label + ':'), el('b', null, value));
+                    wrap.append(pill);
+                });
+                return wrap;
+            }
+
             // ---------- API tekshiruvi ----------
             document.getElementById('ping-btn').addEventListener('click', async function () {
                 const button = this;
@@ -287,9 +310,9 @@
             }
 
             function syncStage() {
-                const namesOnly = selectedStage() === 'names';
-                document.getElementById('skip-missing-wrap').classList.toggle('d-none', namesOnly);
-                document.getElementById('start-label').textContent = namesOnly ? 'Nomlarni formatlash' : 'Boshlash';
+                const stage = selectedStage();
+                document.getElementById('skip-missing-wrap').classList.toggle('d-none', stage !== 'full');
+                document.getElementById('start-label').textContent = { full: 'Boshlash', names: 'Nomlarni formatlash va INN', inn: 'INN qo\'shish' }[stage];
             }
 
             document.querySelectorAll('input[name="stage"]').forEach(function (radio) {
@@ -371,8 +394,12 @@
                         progressCell.append(bar, el('div', 'small text-muted',
                             run.progress.done + '/' + run.progress.total + ' · ✅ ' + run.progress.found + ' · ❌ ' + run.progress.not_found +
                             (run.progress.errors ? ' · ⚠️ ' + run.progress.errors : '')));
-                    } else {
-                        progressCell.append(el('span', 'text-muted small', run.stage === 'names' ? 'faqat nomlar' : '—'));
+                    } else if (!run.inn) {
+                        progressCell.append(el('span', 'text-muted small', '—'));
+                    }
+
+                    if (run.inn) {
+                        progressCell.append(el('div', 'small text-muted', 'INN: ' + run.inn.done + '/' + run.inn.total + ' · ✅ ' + run.inn.found));
                     }
 
                     const actions = el('td', 'text-end text-nowrap');
@@ -394,7 +421,8 @@
                     fileName.style.maxWidth = '200px';
                     fileName.title = run.file;
                     fileCell.append(fileName);
-                    if (run.stage === 'names') fileCell.append(el('span', 'badge bg-primary-subtle text-primary-emphasis ms-1', '2-bosqich'));
+                    if (run.stage === 'names') fileCell.append(el('span', 'badge bg-primary-subtle text-primary-emphasis ms-1', '2-bosqichdan'));
+                    if (run.stage === 'inn') fileCell.append(el('span', 'badge bg-primary-subtle text-primary-emphasis ms-1', '3-bosqich'));
                     if (run.skip_missing) fileCell.append(el('span', 'badge bg-secondary-subtle text-secondary-emphasis ms-1', 'eskilarsiz'));
 
                     row.append(
@@ -464,7 +492,7 @@
 
                 document.getElementById('output-title').replaceChildren(
                     document.createTextNode('#' + run.id + ' ' + run.file + ' '), badge(run.status));
-                document.getElementById('output-stats').replaceChildren(statPills(run.progress));
+                document.getElementById('output-stats').replaceChildren(statPills(run.progress), innPills(run.inn));
                 document.getElementById('output-bar').style.width = percent(run.progress) + '%';
                 document.getElementById('output-bar').parentElement.classList.toggle('d-none', !run.progress);
                 renderLog(run.output);

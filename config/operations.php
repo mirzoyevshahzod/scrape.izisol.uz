@@ -102,18 +102,32 @@ return [
             'commands' => [
                 ['mintrans:scrape', ['file' => '{file}', '--output' => '{result}', '--run' => '{run}', '--skip-known-missing' => '{skip_missing}']],
                 ['mintrans:clean-names', ['file' => '{result}']],
+                ['mintrans:inn', ['file' => '{result}', '--run' => '{run}']],
             ],
         ],
 
-        // Mintrans Avtoraqam sahifasi, "Faqat 2-bosqich": ma'lumoti bor Excel'da faqat korxona nomlarini formatlash
+        // Mintrans Avtoraqam sahifasi, "2-bosqichdan": ma'lumoti bor Excel'da nomlarni formatlash + INN
         'mintrans-names' => [
-            'label' => 'Korxona nomlarini formatlash',
-            'description' => 'Yuklangan Excel\'dagi "Korxona nomi" ustunini OOO "NOMI" ko\'rinishiga keltirish (Mintrans\'ga so\'rov yuborilmaydi).',
+            'label' => 'Korxona nomlari va INN',
+            'description' => 'Yuklangan Excel\'dagi korxona nomlarini OOO "NOMI" ko\'rinishiga keltirib, orginfo.uz\'dan INN qo\'shish (Mintrans\'ga so\'rov yuborilmaydi).',
             'icon' => 'fa-spell-check',
             'permission' => 'page.mintrans-auto',
             'hidden' => true,
             'commands' => [
                 ['mintrans:clean-names', ['file' => '{file}', '--output' => '{result}']],
+                ['mintrans:inn', ['file' => '{result}', '--run' => '{run}']],
+            ],
+        ],
+
+        // Mintrans Avtoraqam sahifasi, "Faqat 3-bosqich": nomlari formatlangan Excel'ga orginfo.uz'dan INN
+        'mintrans-inn' => [
+            'label' => 'INN qo\'shish',
+            'description' => 'Yuklangan Excel\'dagi korxona nomlari bo\'yicha orginfo.uz\'dan INN topib, auto_import_template formatiga keltirish.',
+            'icon' => 'fa-hashtag',
+            'permission' => 'page.mintrans-auto',
+            'hidden' => true,
+            'commands' => [
+                ['mintrans:inn', ['file' => '{file}', '--output' => '{result}', '--run' => '{run}']],
             ],
         ],
 

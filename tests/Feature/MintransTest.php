@@ -181,6 +181,7 @@ class MintransTest extends TestCase
         $this->assertSame([
             ['mintrans:scrape', ['file' => '/in.xlsx', '--output' => '/out.xlsx', '--run' => $run->id, '--skip-known-missing' => true]],
             ['mintrans:clean-names', ['file' => '/out.xlsx']],
+            ['mintrans:inn', ['file' => '/out.xlsx', '--run' => $run->id]],
         ], RunOperationJob::commandsFor($run));
 
         $run->update(['params' => ['file' => '/in.xlsx', 'result' => '/out.xlsx', 'skip_missing' => false]]);
@@ -307,7 +308,10 @@ class MintransTest extends TestCase
         $run = JobRun::sole();
         $this->assertSame('mintrans-names', $run->operation);
         $this->assertSame('mintrans_result_28_10_formatlangan.xlsx', $run->params['download_name']);
-        $this->assertSame([['mintrans:clean-names', ['file' => $run->params['file'], '--output' => $run->params['result']]]], RunOperationJob::commandsFor($run));
+        $this->assertSame([
+            ['mintrans:clean-names', ['file' => $run->params['file'], '--output' => $run->params['result']]],
+            ['mintrans:inn', ['file' => $run->params['result'], '--run' => $run->id]],
+        ], RunOperationJob::commandsFor($run));
 
         unlink($run->params['file']);
     }
@@ -343,6 +347,7 @@ class MintransTest extends TestCase
 
     public function test_names_only_job_formats_and_downloads_with_new_name(): void
     {
+        Http::fake(['orginfo.uz/*' => Http::response(OrginfoClientTest::page([['308413072', '"BAXT TRANSPORT" mas`uliyati cheklangan jamiyati']]))]);
         $this->actingAs($this->user(['page.mintrans-auto']));
         $input = $this->companyFile();
         $run = JobRun::create(['operation' => 'mintrans-names', 'status' => JobRun::QUEUED, 'params' => [
@@ -355,11 +360,39 @@ class MintransTest extends TestCase
         $rows = $this->rows("{$this->dir}/out/natija.xlsx");
         $this->assertSame('OOO "BAXT TRANSPORT"', $rows[2]['C']);
         $this->assertSame('OOO "T******* A******"', $rows[3]['C']);
+        // 3-bosqich ham ishladi: auto_import_template ustunlari
+        $this->assertSame(['инн', 'Yangi telefon raqami'], [$rows[1]['N'], $rows[1]['O']]);
+        $this->assertSame('308413072', $rows[2]['N']);
+        $this->assertNull($rows[3]['N']);
         $this->assertStringContainsString('МЧЖ', $this->rows($input)[2]['C']); // yuklangan asl fayl o'zgarmaydi
 
         $this->get("/mintrans-auto/runs/{$run->id}/download")->assertOk()->assertDownload('x_formatlangan.xlsx');
 
         unlink("{$this->dir}/out/natija.xlsx");
         rmdir("{$this->dir}/out");
+    }
+
+    // --- faqat 3-bosqich ---
+
+    public function test_inn_only_upload(): void
+    {
+        Queue::fake();
+        $this->actingAs($this->user(['page.mintrans-auto']));
+        $file = new UploadedFile($this->companyFile(), 'tayyor.xlsx', null, null, true);
+
+        $this->post('/mintrans-auto/start', ['file' => $file, 'stage' => 'inn'], ['Accept' => 'application/json'])
+            ->assertStatus(202)
+            ->assertJsonPath('run.stage', 'inn');
+
+        $run = JobRun::sole();
+        $this->assertSame('mintrans-inn', $run->operation);
+        $this->assertSame('tayyor_inn.xlsx', $run->params['download_name']);
+        $this->assertSame([['mintrans:inn', ['file' => $run->params['file'], '--output' => $run->params['result'], '--run' => $run->id]]], RunOperationJob::commandsFor($run));
+
+        // "Korxona nomi" ustuni bo'lmasa — rad etiladi
+        $bad = new UploadedFile($this->inputFile(['10S208NB']), 'raqam.xlsx', null, null, true);
+        $this->post('/mintrans-auto/start', ['file' => $bad, 'stage' => 'inn'], ['Accept' => 'application/json'])->assertStatus(422);
+
+        unlink($run->params['file']);
     }
 }
