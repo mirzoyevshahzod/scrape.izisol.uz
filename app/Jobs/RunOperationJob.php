@@ -93,6 +93,9 @@ class RunOperationJob implements ShouldQueue
      * biriga --date=YYYY-MM-DD, qo'shimcha maydonlar tanlangan bo'lsa
      * tegishli opsiyalari (masalan --only=zitic --force) qo'shiladi.
      *
+     * Config'dagi "{nom}" ko'rinishidagi qiymatlar ishning params'idan olinadi
+     * ("{run}" — ish id'si); qiymat yo'q yoki false bo'lsa parametr tushib qoladi.
+     *
      * @return array<int,array{0:string,1:array}>
      */
     public static function commandsFor(JobRun $run): array
@@ -106,10 +109,25 @@ class RunOperationJob implements ShouldQueue
             $options = ['--date' => $params['date']] + $options;
         }
 
-        return array_map(
-            fn ($command) => [$command[0], $command[1] + $options],
-            $operation['commands'] ?? []
-        );
+        $values = $params + ['run' => $run->id];
+
+        return array_map(function ($command) use ($options, $values) {
+            $parameters = [];
+
+            foreach ($command[1] as $key => $value) {
+                if (is_string($value) && preg_match('/^\{(\w+)\}$/', $value, $m)) {
+                    $value = $values[$m[1]] ?? null;
+
+                    if ($value === null || $value === false || $value === '') {
+                        continue;
+                    }
+                }
+
+                $parameters[$key] = $value;
+            }
+
+            return [$command[0], $parameters + $options];
+        }, $operation['commands'] ?? []);
     }
 
     /**

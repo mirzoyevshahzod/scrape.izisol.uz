@@ -31,7 +31,8 @@ class OperationController extends Controller
     {
         $config = config("operations.operations.{$operation}");
 
-        abort_unless($config, 404);
+        // yashirin amallar (masalan Mintrans — fayl yuklash bilan) faqat o'z sahifasidan ishga tushadi
+        abort_unless($config && empty($config['hidden']), 404);
         abort_unless($request->user()->can($config['permission']), 403);
 
         // Kun so'raladigan amallar (config: 'date' => true) uchun sana majburiy
@@ -108,12 +109,12 @@ class OperationController extends Controller
         return response()->json($this->present($run) + ['output' => $run->output ?? '']);
     }
 
-    /** @return array<string,array> foydalanuvchi ishga tushira oladigan amallar */
+    /** @return array<string,array> foydalanuvchi Boshqaruv'da ishga tushira oladigan amallar (yashirinlarsiz) */
     private function allowedOperations(Request $request): array
     {
         return array_filter(
             config('operations.operations'),
-            fn ($config) => $request->user()->can($config['permission'])
+            fn ($config) => empty($config['hidden']) && $request->user()->can($config['permission'])
         );
     }
 

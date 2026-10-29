@@ -18,7 +18,7 @@ class DashboardController extends Controller
 
         $operations = array_filter(
             config('operations.operations'),
-            fn ($operation) => $user->can($operation['permission'])
+            fn ($operation) => empty($operation['hidden']) && $user->can($operation['permission'])
         );
 
         $recentRuns = $operations

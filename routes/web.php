@@ -5,11 +5,10 @@ use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\HomeController;
+use App\Http\Controllers\MintransController;
 use App\Http\Controllers\OperationController;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\EomborScrapeController;
-use App\Http\Controllers\ExampleController;
-use App\Http\Controllers\MintransController;
 use App\Http\Controllers\ScrapeController;
 use App\Http\Controllers\TurkeyScraperController;
 use App\Http\Controllers\API\QozoqController;
@@ -30,11 +29,17 @@ Route::middleware('auth')->group(function () {
     // Eombor scraping routes
     Route::get('/scrape-eombor', [EomborScrapeController::class, 'index'])->name('scrape.eombor')->middleware('permission:page.eombor-scrape');
     Route::post('/scrape-eombor', [EomborScrapeController::class, 'scrape'])->name('scrape.eombor.process')->middleware('permission:page.eombor-scrape');
-
-    //Mintrans license
-    Route::get('/mintrans-litsenziya', [HomeController::class, 'mintrans'])->name('index')->middleware('permission:page.mintrans-license');
-    //Mintrans Avtoraqam
-    Route::get('/mintrans-auto', [HomeController::class, 'mintransAuto'])->name('upload.index')->middleware('permission:page.mintrans-auto');
+    // Mintrans Avtoraqam: Excel -> Mintrans API -> natija Excel (queue orqali)
+    Route::prefix('mintrans-auto')->name('mintrans.')->middleware('permission:page.mintrans-auto')->group(function () {
+        Route::get('/', [MintransController::class, 'index'])->name('index');
+        Route::post('/start', [MintransController::class, 'start'])->name('start');
+        Route::get('/runs', [MintransController::class, 'runs'])->name('runs');
+        Route::get('/runs/{run}', [MintransController::class, 'show'])->name('show');
+        Route::get('/runs/{run}/download', [MintransController::class, 'download'])->name('download');
+        Route::get('/ping', [MintransController::class, 'ping'])->name('ping');
+        Route::get('/missing', [MintransController::class, 'missing'])->name('missing');
+        Route::get('/missing/export', [MintransController::class, 'exportMissing'])->name('missing.export');
+    });
     //Belarus scraping
     Route::get('/belarus', [HomeController::class, 'belarus'])->name('scrape.data')->middleware('permission:page.belarus');
     //Qozoq scraping

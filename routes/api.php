@@ -3,8 +3,6 @@
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\TelegramBotController;
-use App\Http\Controllers\API\ExampleController;
-use App\Http\Controllers\API\MintransController;
 use App\Http\Controllers\API\ScrapeController;
 use App\Http\Controllers\API\TurkeyController;
 use App\Http\Controllers\API\QozoqController;
@@ -36,18 +34,6 @@ Route::middleware(['web', 'auth'])->group(function () {
     });
 
     Route::post('/checkpoints/scrape-all', [CheckpointScraperController::class, 'scrapeAll'])->middleware('permission:operation.scraping');
-
-    Route::get('/mintrans/all-files', [ExampleController::class, 'listIntegratedFiles'])->middleware('permission:page.mintrans-license');
-    Route::post('/mintrans/download', [ExampleController::class, 'FileDownload'])->middleware('permission:page.mintrans-license');
-    Route::post('/mintrans/submit',[ExampleController::class,'submit'])->middleware('permission:page.mintrans-license');
-    Route::get('/mintrans/check/{jobId}',[ExampleController::class,'check'])->middleware('permission:page.mintrans-license');
-    Route::get('/mintrans/download/{jobId}',[ExampleController::class,'download'])->middleware('permission:page.mintrans-license');
-
-    Route::post('/upload', [MintransController::class, 'upload'])->name('upload.store')->middleware('permission:page.mintrans-auto');
-    Route::get('/scrape/check-result/{jobId}', [MintransController::class, 'checkStatus'])->middleware('permission:page.mintrans-auto');
-    Route::get('/download/{jobId}', [MintransController::class, 'download'])->middleware('permission:page.mintrans-auto');
-    Route::get('/scrape/all-files', [MintransController::class, 'listIntegratedFiles'])->middleware('permission:page.mintrans-auto');
-    Route::post('/scrape/download', [MintransController::class, 'FileDownload'])->middleware('permission:page.mintrans-auto');
 
 
 

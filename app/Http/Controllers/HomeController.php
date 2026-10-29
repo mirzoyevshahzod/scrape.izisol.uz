@@ -6,15 +6,6 @@ use Illuminate\Http\Request;
 
 class HomeController extends Controller
 {
-    public function mintransAuto()
-    {
-        return view('mintrans_auto');
-    }
-
-    public function mintrans()
-    {
-        return view('mintrans_scrape');
-    }
 
     public function belarus()
     {

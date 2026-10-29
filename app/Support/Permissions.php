@@ -21,7 +21,6 @@ final class Permissions
         'Sahifalar' => [
             'page.autos' => 'Autos',
             'page.mintrans-auto' => 'Mintrans Avtoraqam',
-            'page.mintrans-license' => 'Mintrans Litsenziya',
             'page.qozoq' => 'Qozoq Scraper',
             'page.check-qozoq' => 'Qozoq Tekshirilgan',
             'page.belarus' => 'Belarus Litva',

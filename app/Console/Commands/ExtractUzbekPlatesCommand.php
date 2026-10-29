@@ -2,7 +2,9 @@
 
 namespace App\Console\Commands;
 
+use App\Support\UzbekPlates;
 use Illuminate\Console\Command;
+use PhpOffice\PhpSpreadsheet\Cell\DataType;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
@@ -28,33 +30,16 @@ class ExtractUzbekPlatesCommand extends Command
 
         $row = 2;
 
-        $regions = [
-            '01','10','20','25','30',
-            '40','50','60','70','80',
-            '85','95'
-        ];
-
-        $regionPattern = implode('|', $regions);
-
-        // 10174BBB yoki 10B174BB
-        $pattern = '/\b(?:'
-            . '(?:' . $regionPattern . ')[0-9]{3}[A-Z]{3}'
-            . '|'
-            . '(?:' . $regionPattern . ')[A-Z][0-9]{3}[A-Z]{2}'
-            . ')\b/i';
-
+        // Raqam formatlari va hudud kodlari: App\Support\UzbekPlates
         foreach ($sheet->getRowIterator() as $excelRow) {
 
             $rowIndex = $excelRow->getRowIndex();
 
             $value = (string)$sheet->getCell('A'.$rowIndex)->getFormattedValue();
 
-            if (preg_match_all($pattern, strtoupper($value), $matches)) {
+            foreach (UzbekPlates::extract($value) as $plate) {
 
-                foreach ($matches[0] as $plate) {
-
-                    $newSheet->setCellValue('A'.$row++, $plate);
-                }
+                $newSheet->setCellValueExplicit('A'.$row++, $plate, DataType::TYPE_STRING);
             }
         }
 

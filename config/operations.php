@@ -92,6 +92,19 @@ return [
             ],
         ],
 
+        // Mintrans Avtoraqam sahifasidan (fayl yuklab) ishga tushiriladi — Boshqaruv'da ko'rinmaydi
+        'mintrans' => [
+            'label' => 'Mintrans Avtoraqam',
+            'description' => 'Excel\'dagi O\'zbekiston avtoraqamlari bo\'yicha Mintrans ma\'lumotlari va korxona nomlarini formatlash.',
+            'icon' => 'fa-id-card',
+            'permission' => 'page.mintrans-auto',
+            'hidden' => true,
+            'commands' => [
+                ['mintrans:scrape', ['file' => '{file}', '--output' => '{result}', '--run' => '{run}', '--skip-known-missing' => '{skip_missing}']],
+                ['mintrans:clean-names', ['file' => '{result}']],
+            ],
+        ],
+
         'scraping' => [
             'label' => 'Barcha scraping',
             'description' => 'Qoldau (4 ta), Declarant (3 ta), Zitic va Turkiya scraping\'ini ketma-ket ishga tushiradi.',
