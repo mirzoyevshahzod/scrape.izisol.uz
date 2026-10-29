@@ -105,6 +105,18 @@ return [
             ],
         ],
 
+        // Mintrans Avtoraqam sahifasi, "Faqat 2-bosqich": ma'lumoti bor Excel'da faqat korxona nomlarini formatlash
+        'mintrans-names' => [
+            'label' => 'Korxona nomlarini formatlash',
+            'description' => 'Yuklangan Excel\'dagi "Korxona nomi" ustunini OOO "NOMI" ko\'rinishiga keltirish (Mintrans\'ga so\'rov yuborilmaydi).',
+            'icon' => 'fa-spell-check',
+            'permission' => 'page.mintrans-auto',
+            'hidden' => true,
+            'commands' => [
+                ['mintrans:clean-names', ['file' => '{file}', '--output' => '{result}']],
+            ],
+        ],
+
         'scraping' => [
             'label' => 'Barcha scraping',
             'description' => 'Qoldau (4 ta), Declarant (3 ta), Zitic va Turkiya scraping\'ini ketma-ket ishga tushiradi.',

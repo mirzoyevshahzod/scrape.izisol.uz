@@ -277,4 +277,89 @@ class MintransTest extends TestCase
 
         $this->getJson('/mintrans-auto/ping')->assertOk()->assertJson(['ok' => false]);
     }
+
+    // --- faqat 2-bosqich ---
+
+    private function companyFile(): string
+    {
+        $book = new Spreadsheet();
+        $book->getActiveSheet()->fromArray([
+            ['Rusumi', 'Davlat raqami', 'Korxona nomi'],
+            ['MAN', '10S208NB', 'МЧЖ "BAXT TRANSPORT" MAS\'ULIYATI CHEKLANGAN JAMIYAT'],
+            ['LACETTI', '01Z001AA', "O'O'B T******* A******"],
+        ]);
+        $path = "{$this->dir}/names-" . uniqid() . '.xlsx';
+        (new Xlsx($book))->save($path);
+
+        return $path;
+    }
+
+    public function test_names_only_upload_runs_just_stage_two(): void
+    {
+        Queue::fake();
+        $this->actingAs($this->user(['page.mintrans-auto']));
+        $file = new UploadedFile($this->companyFile(), 'mintrans_result 28.10.xlsx', null, null, true);
+
+        $this->post('/mintrans-auto/start', ['file' => $file, 'stage' => 'names'], ['Accept' => 'application/json'])
+            ->assertStatus(202)
+            ->assertJsonPath('run.stage', 'names');
+
+        $run = JobRun::sole();
+        $this->assertSame('mintrans-names', $run->operation);
+        $this->assertSame('mintrans_result_28_10_formatlangan.xlsx', $run->params['download_name']);
+        $this->assertSame([['mintrans:clean-names', ['file' => $run->params['file'], '--output' => $run->params['result']]]], RunOperationJob::commandsFor($run));
+
+        unlink($run->params['file']);
+    }
+
+    public function test_names_only_requires_company_column(): void
+    {
+        Queue::fake();
+        $this->actingAs($this->user(['page.mintrans-auto']));
+        $file = new UploadedFile($this->inputFile(['10S208NB']), 'raqamlar.xlsx', null, null, true);
+
+        $this->post('/mintrans-auto/start', ['file' => $file, 'stage' => 'names'], ['Accept' => 'application/json'])
+            ->assertStatus(422)
+            ->assertJsonPath('message', 'Faylda "Korxona nomi" ustuni topilmadi.');
+
+        $this->assertSame(0, JobRun::count());
+        Queue::assertNothingPushed();
+    }
+
+    public function test_names_only_can_run_while_a_full_run_is_active(): void
+    {
+        Queue::fake();
+        $this->actingAs($this->user(['page.mintrans-auto']));
+        JobRun::create(['operation' => 'mintrans', 'status' => JobRun::RUNNING, 'params' => ['original_name' => 'a.xlsx']]);
+
+        $file = new UploadedFile($this->companyFile(), 'n.xlsx', null, null, true);
+        $this->post('/mintrans-auto/start', ['file' => $file, 'stage' => 'names'], ['Accept' => 'application/json'])->assertStatus(202);
+
+        $stages = collect($this->getJson('/mintrans-auto/runs')->json('runs'))->pluck('stage')->all();
+        $this->assertSame(['names', 'full'], $stages);
+
+        unlink(JobRun::where('operation', 'mintrans-names')->sole()->params['file']);
+    }
+
+    public function test_names_only_job_formats_and_downloads_with_new_name(): void
+    {
+        $this->actingAs($this->user(['page.mintrans-auto']));
+        $input = $this->companyFile();
+        $run = JobRun::create(['operation' => 'mintrans-names', 'status' => JobRun::QUEUED, 'params' => [
+            'file' => $input, 'original_name' => 'x.xlsx', 'result' => "{$this->dir}/out/natija.xlsx", 'download_name' => 'x_formatlangan.xlsx',
+        ]]);
+
+        (new RunOperationJob($run))->handle();
+
+        $this->assertSame(JobRun::SUCCESS, $run->fresh()->status);
+        $rows = $this->rows("{$this->dir}/out/natija.xlsx");
+        $this->assertSame('OOO "BAXT TRANSPORT"', $rows[2]['C']);
+        $this->assertSame('OOO "T******* A******"', $rows[3]['C']);
+        $this->assertStringContainsString('МЧЖ', $this->rows($input)[2]['C']); // yuklangan asl fayl o'zgarmaydi
+
+        $this->get("/mintrans-auto/runs/{$run->id}/download")->assertOk()->assertDownload('x_formatlangan.xlsx');
+
+        unlink("{$this->dir}/out/natija.xlsx");
+        rmdir("{$this->dir}/out");
+    }
 }

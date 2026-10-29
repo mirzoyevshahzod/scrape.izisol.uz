@@ -14,6 +14,19 @@
         .log-line-found { color: #7ee2a8; }
         .log-line-missing { color: #ff9b9b; }
         .log-line-error { color: #ffd479; }
+        .stage-option {
+            display: flex;
+            gap: 10px;
+            padding: 10px 12px 10px 36px;
+            border: 1px solid var(--ui-border);
+            border-radius: 10px;
+            cursor: pointer;
+            margin: 0;
+        }
+        .stage-option:has(input:checked) {
+            border-color: rgba(var(--ui-primary-rgb), 0.6);
+            background: var(--ui-primary-soft);
+        }
         .stat-pill {
             display: inline-flex;
             align-items: center;
@@ -58,6 +71,26 @@
                     </div>
 
                     <form id="start-form" class="d-flex flex-column gap-3">
+                        <div>
+                            <div class="form-label mb-2">Qaysi bosqichdan boshlash?</div>
+                            <div class="d-flex flex-column gap-2">
+                                <label class="form-check stage-option">
+                                    <input class="form-check-input" type="radio" name="stage" value="full" checked>
+                                    <span class="form-check-label">
+                                        <b>1-bosqichdan</b> — Mintrans'dan ma'lumot olish va nomlarni formatlash
+                                        <span class="text-muted small d-block">A ustunida avtoraqamlar bo'lgan Excel.</span>
+                                    </span>
+                                </label>
+                                <label class="form-check stage-option">
+                                    <input class="form-check-input" type="radio" name="stage" value="names">
+                                    <span class="form-check-label">
+                                        <b>Faqat 2-bosqich</b> — korxona nomlarini formatlash
+                                        <span class="text-muted small d-block">Ma'lumoti olingan Excel ("Korxona nomi" ustuni bor). Mintrans'ga so'rov yuborilmaydi.</span>
+                                    </span>
+                                </label>
+                            </div>
+                        </div>
+
                         <label class="dropzone" for="file-input" id="dropzone">
                             <i class="fas fa-cloud-arrow-up"></i>
                             <span class="dropzone-file" id="file-name">Excel faylni tanlang yoki shu yerga tashlang</span>
@@ -65,7 +98,7 @@
                         </label>
                         <input type="file" id="file-input" name="file" accept=".xlsx,.xls,.csv" class="d-none">
 
-                        <div class="form-check">
+                        <div class="form-check" id="skip-missing-wrap">
                             <input class="form-check-input" type="checkbox" id="skip-missing" name="skip_missing">
                             <label class="form-check-label" for="skip-missing">
                                 Avval topilmagan raqamlarni qayta so'ramaslik
@@ -74,7 +107,7 @@
                         </div>
 
                         <button type="submit" class="btn btn-primary py-2" id="start-btn" disabled>
-                            <i class="fas fa-play me-1"></i>Boshlash
+                            <i class="fas fa-play me-1"></i><span id="start-label">Boshlash</span>
                         </button>
                     </form>
 
@@ -248,6 +281,21 @@
             }
 
             fileInput.addEventListener('change', showFile);
+
+            function selectedStage() {
+                return document.querySelector('input[name="stage"]:checked').value;
+            }
+
+            function syncStage() {
+                const namesOnly = selectedStage() === 'names';
+                document.getElementById('skip-missing-wrap').classList.toggle('d-none', namesOnly);
+                document.getElementById('start-label').textContent = namesOnly ? 'Nomlarni formatlash' : 'Boshlash';
+            }
+
+            document.querySelectorAll('input[name="stage"]').forEach(function (radio) {
+                radio.addEventListener('change', syncStage);
+            });
+            syncStage();
             ['dragenter', 'dragover'].forEach(function (type) {
                 dropzone.addEventListener(type, function (e) { e.preventDefault(); dropzone.classList.add('is-dragover'); });
             });
@@ -268,6 +316,7 @@
 
                 const form = new FormData();
                 form.append('file', fileInput.files[0]);
+                form.append('stage', selectedStage());
                 form.append('skip_missing', document.getElementById('skip-missing').checked ? '1' : '0');
 
                 startBtn.disabled = true;
@@ -323,7 +372,7 @@
                             run.progress.done + '/' + run.progress.total + ' · ✅ ' + run.progress.found + ' · ❌ ' + run.progress.not_found +
                             (run.progress.errors ? ' · ⚠️ ' + run.progress.errors : '')));
                     } else {
-                        progressCell.append(el('span', 'text-muted small', '—'));
+                        progressCell.append(el('span', 'text-muted small', run.stage === 'names' ? 'faqat nomlar' : '—'));
                     }
 
                     const actions = el('td', 'text-end text-nowrap');
@@ -339,9 +388,13 @@
                         actions.append(link);
                     }
 
-                    const fileCell = el('td', 'text-truncate', run.file);
-                    fileCell.style.maxWidth = '220px';
-                    fileCell.title = run.file;
+                    // faqat nom kesiladi — belgilar doim ko'rinsin
+                    const fileCell = el('td', 'text-nowrap');
+                    const fileName = el('span', 'd-inline-block text-truncate align-middle', run.file);
+                    fileName.style.maxWidth = '200px';
+                    fileName.title = run.file;
+                    fileCell.append(fileName);
+                    if (run.stage === 'names') fileCell.append(el('span', 'badge bg-primary-subtle text-primary-emphasis ms-1', '2-bosqich'));
                     if (run.skip_missing) fileCell.append(el('span', 'badge bg-secondary-subtle text-secondary-emphasis ms-1', 'eskilarsiz'));
 
                     row.append(
@@ -366,7 +419,8 @@
                     renderRuns(data.runs);
 
                     const anyActive = data.runs.some(function (run) { return run.active; });
-                    startBtn.disabled = anyActive || !fileInput.files[0];
+                    // bitta bosqich bir vaqtda faqat bir marta — buni server tekshiradi (409)
+                    startBtn.disabled = !fileInput.files[0];
                     document.getElementById('worker-warning').classList.toggle('d-none',
                         !data.runs.some(function (run) { return run.status === 'queued' && run.queued_seconds > 60; }));
 
@@ -412,6 +466,7 @@
                     document.createTextNode('#' + run.id + ' ' + run.file + ' '), badge(run.status));
                 document.getElementById('output-stats').replaceChildren(statPills(run.progress));
                 document.getElementById('output-bar').style.width = percent(run.progress) + '%';
+                document.getElementById('output-bar').parentElement.classList.toggle('d-none', !run.progress);
                 renderLog(run.output);
 
                 if (run.active) setTimeout(loadOutput, 2000);

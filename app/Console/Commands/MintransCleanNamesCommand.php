@@ -71,6 +71,10 @@ class MintransCleanNamesCommand extends Command
             }
         }
 
+        if (! is_dir(dirname($output))) {
+            mkdir(dirname($output), 0775, true);
+        }
+
         (new Xlsx($book))->save($output);
 
         foreach ($examples as $example) {

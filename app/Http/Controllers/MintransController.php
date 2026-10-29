@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 use Illuminate\View\View;
 use PhpOffice\PhpSpreadsheet\Cell\DataType;
+use PhpOffice\PhpSpreadsheet\IOFactory;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
@@ -20,14 +21,16 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 /**
  * Mintrans Avtoraqam sahifasi (permission: page.mintrans-auto).
  *
- * Yuklangan Excel "mintrans" amali sifatida queue'ga qo'yiladi
- * (config/operations.php, RunOperationJob):
- *   1-bosqich mintrans:scrape       — Mintrans'dan ma'lumot, topilmaganlar bazaga;
- *   2-bosqich mintrans:clean-names  — korxona nomlarini OOO "NOMI" ko'rinishiga.
+ * Yuklangan Excel queue'ga qo'yiladi (config/operations.php, RunOperationJob):
+ *   "mintrans"        — 1-bosqich mintrans:scrape (Mintrans'dan ma'lumot,
+ *                       topilmaganlar bazaga) + 2-bosqich mintrans:clean-names;
+ *   "mintrans-names"  — faqat 2-bosqich: ma'lumoti bor Excel'da korxona
+ *                       nomlarini OOO "NOMI" ko'rinishiga keltirish.
  */
 class MintransController extends Controller
 {
-    private const OPERATION = 'mintrans';
+    /** bosqich => amal (config/operations.php) */
+    private const OPERATIONS = ['full' => 'mintrans', 'names' => 'mintrans-names'];
 
     public function index(): View
     {
@@ -40,6 +43,7 @@ class MintransController extends Controller
     {
         $request->validate([
             'file' => ['required', 'file', 'mimes:xlsx,xls,csv', 'max:10240'],
+            'stage' => ['nullable', 'in:full,names'],
             'skip_missing' => ['nullable', 'boolean'],
         ], [
             'file.required' => 'Excel faylni tanlang.',
@@ -47,63 +51,92 @@ class MintransController extends Controller
             'file.max' => 'Fayl 10 MB dan oshmasin.',
         ]);
 
+        $stage = $request->input('stage', 'full');
+        $operation = self::OPERATIONS[$stage];
         $upload = $request->file('file');
+
+        // faqat 2-bosqich: "Korxona nomi" ustuni bo'lmasa — navbatga qo'ymasdan darhol aytamiz
+        if ($stage === 'names' && ! $this->hasCompanyColumn($upload->getRealPath())) {
+            return response()->json([
+                'message' => 'Faylda "Korxona nomi" ustuni topilmadi.',
+                'errors' => ['file' => ['Faylning 1-qatorida "Korxona nomi" sarlavhali ustun bo\'lishi kerak.']],
+            ], 422);
+        }
+
         // nom foydalanuvchidan emas — uuid + fayl mazmuniga qarab aniqlangan kengaytma
         $name = Str::uuid() . '.' . ($upload->guessExtension() ?: 'xlsx');
         $dir = storage_path('app/mintrans/uploads');
         $upload->move($dir, $name);
 
-        $run = Cache::lock('operations:run:' . self::OPERATION, 10)->block(5, function () use ($request, $upload, $dir, $name) {
-            if (JobRun::where('operation', self::OPERATION)->active()->exists()) {
+        $originalName = mb_substr($upload->getClientOriginalName(), 0, 150);
+        $resultDir = storage_path('app/mintrans/results');
+
+        $params = $stage === 'names'
+            ? [
+                'file' => "{$dir}/{$name}",
+                'original_name' => $originalName,
+                'result' => "{$resultDir}/" . Str::uuid() . '.xlsx',
+                // yuklab olinganda: "<asl nom>_formatlangan.xlsx"
+                'download_name' => $this->safeBaseName($originalName) . '_formatlangan.xlsx',
+            ]
+            : [
+                'file' => "{$dir}/{$name}",
+                'original_name' => $originalName,
+                'result' => "{$resultDir}/mintrans_result_" . now()->format('Y_m_d_H_i_s') . '.xlsx',
+                'skip_missing' => $request->boolean('skip_missing'),
+            ];
+
+        $run = Cache::lock("operations:run:{$operation}", 10)->block(5, function () use ($request, $operation, $params) {
+            if (JobRun::where('operation', $operation)->active()->exists()) {
                 return null;
             }
 
             return JobRun::create([
-                'operation' => self::OPERATION,
+                'operation' => $operation,
                 'status' => JobRun::QUEUED,
                 'user_id' => $request->user()->id,
-                'params' => [
-                    'file' => "{$dir}/{$name}",
-                    'original_name' => mb_substr($upload->getClientOriginalName(), 0, 150),
-                    'result' => storage_path('app/mintrans/results/mintrans_result_' . now()->format('Y_m_d_H_i_s') . '.xlsx'),
-                    'skip_missing' => $request->boolean('skip_missing'),
-                ],
+                'params' => $params,
             ]);
         });
 
         if (! $run) {
             @unlink("{$dir}/{$name}");
 
-            return response()->json(['message' => 'Mintrans tekshiruvi allaqachon ishlayapti — tugashini kuting.'], 409);
+            return response()->json(['message' => $stage === 'names'
+                ? 'Nomlarni formatlash allaqachon ishlayapti — tugashini kuting.'
+                : 'Mintrans tekshiruvi allaqachon ishlayapti — tugashini kuting.'], 409);
         }
 
         RunOperationJob::dispatch($run);
 
-        return response()->json(['message' => 'Fayl qabul qilindi, tekshiruv navbatga qo\'shildi.', 'run' => $this->present($run)], 202);
+        return response()->json([
+            'message' => $stage === 'names' ? 'Fayl qabul qilindi, korxona nomlari formatlanmoqda.' : 'Fayl qabul qilindi, tekshiruv navbatga qo\'shildi.',
+            'run' => $this->present($run),
+        ], 202);
     }
 
     public function runs(): JsonResponse
     {
-        $runs = JobRun::with('user:id,name')->where('operation', self::OPERATION)->latest('id')->limit(20)->get();
+        $runs = JobRun::with('user:id,name')->whereIn('operation', self::OPERATIONS)->latest('id')->limit(20)->get();
 
         return response()->json(['runs' => $runs->map(fn ($run) => $this->present($run))]);
     }
 
     public function show(JobRun $run): JsonResponse
     {
-        abort_unless($run->operation === self::OPERATION, 404);
+        abort_unless(in_array($run->operation, self::OPERATIONS, true), 404);
 
         return response()->json($this->present($run) + ['output' => $run->output ?? '']);
     }
 
     public function download(JobRun $run): BinaryFileResponse
     {
-        abort_unless($run->operation === self::OPERATION, 404);
+        abort_unless(in_array($run->operation, self::OPERATIONS, true), 404);
 
         $file = $run->params['result'] ?? null;
         abort_unless($file && is_file($file), 404, 'Natija fayli hali tayyor emas.');
 
-        return response()->download($file, basename($file));
+        return response()->download($file, $run->params['download_name'] ?? basename($file));
     }
 
     public function ping(MintransClient $client): JsonResponse
@@ -172,6 +205,7 @@ class MintransController extends Controller
 
         return [
             'id' => $run->id,
+            'stage' => $run->operation === self::OPERATIONS['names'] ? 'names' : 'full',
             'file' => $run->params['original_name'] ?? '—',
             'skip_missing' => (bool) ($run->params['skip_missing'] ?? false),
             'status' => $stale ? 'stale' : $run->status,
@@ -185,5 +219,25 @@ class MintransController extends Controller
             'duration' => $run->started_at ? $run->started_at->diffInSeconds($run->finished_at ?? now(), true) : null,
             'queued_seconds' => $run->status === JobRun::QUEUED ? (int) $run->created_at->diffInSeconds(now(), true) : null,
         ];
+    }
+
+    private function hasCompanyColumn(string $path): bool
+    {
+        try {
+            $sheet = IOFactory::load($path)->getActiveSheet();
+            $header = $sheet->rangeToArray('A1:' . $sheet->getHighestColumn() . '1', null, false, false)[0] ?? [];
+
+            return in_array('Korxona nomi', array_map(fn ($v) => trim((string) $v), $header), true);
+        } catch (\Throwable) {
+            return false;
+        }
+    }
+
+    /** Yuklab olinadigan fayl nomi uchun: "mintrans_result 28.10.xlsx" -> "mintrans_result_28_10" */
+    private function safeBaseName(string $original): string
+    {
+        $base = preg_replace('/[^\p{L}\p{N}_-]+/u', '_', pathinfo($original, PATHINFO_FILENAME));
+
+        return trim(mb_substr($base, 0, 100), '_') ?: 'natija';
     }
 }
