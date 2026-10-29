@@ -37,6 +37,7 @@ Route::middleware('auth')->group(function () {
         Route::get('/ping', [MintransController::class, 'ping'])->name('ping');
         Route::get('/missing', [MintransController::class, 'missing'])->name('missing');
         Route::get('/missing/export', [MintransController::class, 'exportMissing'])->name('missing.export');
+        Route::post('/missing/recheck', [MintransController::class, 'recheckMissing'])->name('missing.recheck');
     });
     //Belarus scraping
     Route::get('/belarus', [HomeController::class, 'belarus'])->name('scrape.data')->middleware('permission:page.belarus');

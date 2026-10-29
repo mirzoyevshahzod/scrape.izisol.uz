@@ -131,7 +131,13 @@
             <div class="card h-100">
                 <div class="card-header d-flex align-items-center justify-content-between">
                     <span><i class="fas fa-circle-question me-2 text-muted"></i>Topilmagan raqamlar <span class="badge bg-secondary-subtle text-secondary-emphasis ms-1" id="missing-total">{{ $missingCount }}</span></span>
-                    <a href="{{ route('mintrans.missing.export') }}" class="btn btn-sm btn-light"><i class="fas fa-download me-1"></i>Excel</a>
+                    <span class="text-nowrap">
+                        <button type="button" class="btn btn-sm btn-primary" id="recheck-missing-btn" @disabled($missingCount + $missingErrors === 0)
+                                title="Ro'yxatdagi barcha raqamlarni Mintrans'dan qayta so'rab, 3 bosqichdan o'tkazish">
+                            <i class="fas fa-rotate me-1"></i>Qayta tekshirish
+                        </button>
+                        <a href="{{ route('mintrans.missing.export') }}" class="btn btn-sm btn-light"><i class="fas fa-download me-1"></i>Excel</a>
+                    </span>
                 </div>
                 <div class="card-body pb-2">
                     <input type="search" class="form-control form-control-sm mb-2" id="missing-search" placeholder="Raqam bo'yicha qidirish">
@@ -205,6 +211,7 @@
                 run: @json(url('mintrans-auto/runs')),
                 ping: @json(route('mintrans.ping')),
                 missing: @json(route('mintrans.missing')),
+                recheck: @json(route('mintrans.missing.recheck')),
             };
 
             const STATUS = {
@@ -450,6 +457,7 @@
                     fileCell.append(fileName);
                     if (run.stage === 'names') fileCell.append(el('span', 'badge bg-primary-subtle text-primary-emphasis ms-1', '2-bosqichdan'));
                     if (run.stage === 'inn') fileCell.append(el('span', 'badge bg-primary-subtle text-primary-emphasis ms-1', '3-bosqich'));
+                    if (run.from_missing) fileCell.append(el('span', 'badge bg-info-subtle text-info-emphasis ms-1', 'qayta tekshiruv'));
                     if (run.skip_missing) fileCell.append(el('span', 'badge bg-secondary-subtle text-secondary-emphasis ms-1', 'eskilarsiz'));
 
                     row.append(
@@ -574,7 +582,9 @@
                 const body = document.getElementById('missing-body');
 
                 missingLast = data.last_page;
+                missingCounts = { notFound: data.total, errors: data.errors };
                 document.getElementById('missing-total').textContent = data.total;
+                document.getElementById('recheck-missing-btn').disabled = data.total + data.errors === 0;
                 document.getElementById('missing-page').textContent = data.page + ' / ' + data.last_page;
                 body.replaceChildren();
 
@@ -596,6 +606,32 @@
                     body.append(row);
                 });
             }
+
+            let missingCounts = { notFound: @json($missingCount), errors: @json($missingErrors) };
+
+            document.getElementById('recheck-missing-btn').addEventListener('click', function () {
+                const total = missingCounts.notFound + missingCounts.errors;
+
+                uiConfirm({
+                    title: 'Topilmagan raqamlar qayta tekshirilsinmi?',
+                    message: 'Ro\'yxatdagi ' + total + ' ta raqam (topilmadi: ' + missingCounts.notFound + ', xatolik: ' + missingCounts.errors + ') '
+                        + 'Mintrans\'dan qayta so\'raladi. Ma\'lumoti chiqqanlari ro\'yxatdan chiqadi va 2-, 3-bosqichdan o\'tib (nomlar, INN) '
+                        + 'natija Excel\'iga yoziladi; chiqmaganlari ro\'yxatda qoladi.',
+                    icon: 'fa-rotate',
+                    confirmText: 'Qayta tekshirish',
+                    onConfirm: async function () {
+                        const response = await fetch(urls.recheck, { method: 'POST', headers: { Accept: 'application/json' } });
+                        const data = await response.json().catch(function () { return {}; });
+
+                        if (!response.ok) return data.message || 'Xatolik: HTTP ' + response.status;
+
+                        uiToast(data.message, 'success');
+                        refresh();
+                        openOutput(data.run.id, data.run.file);
+                        return true;
+                    },
+                });
+            });
 
             let searchTimer = null;
             document.getElementById('missing-search').addEventListener('input', function () {

@@ -62,7 +62,7 @@ class MintransTest extends TestCase
     /** 10S208NB topiladi, 01Z001ZZ topilmaydi, 75W606KA'da server xatosi */
     private function fakeApi(): void
     {
-        Http::fake(function ($request) {
+        Http::fake(['info.mintrans.uz/*' => function ($request) {
             return match ($request['autoN']) {
                 '10S208NB' => Http::response(['data' => MintransClientTest::html("Rusumi: MAN TGX Yuk ko'tarish qobiliyati: 0.00", [
                     ['license' => 'AT 10437261', 'plate' => '10S208NB', 'company' => 'МЧЖ "BAXT TRANSPORT" MAS\'ULIYATI CHEKLANGAN JAMIYAT'],
@@ -71,7 +71,7 @@ class MintransTest extends TestCase
                 '75W606KA' => Http::response('down', 500),
                 default => Http::response(['data' => null, 'pdfUrl' => null]),
             };
-        });
+        }]);
     }
 
     private function user(array $permissions): User
@@ -237,6 +237,55 @@ class MintransTest extends TestCase
         $failed = JobRun::create(['operation' => 'mintrans', 'status' => JobRun::FAILED, 'params' => ['file' => $input, 'result' => $input]]);
         JobRun::create(['operation' => 'mintrans', 'status' => JobRun::RUNNING, 'params' => []]);
         $this->postJson("/mintrans-auto/runs/{$failed->id}/resume")->assertStatus(409);
+    }
+
+    public function test_recheck_missing_queues_full_run_with_all_listed_plates(): void
+    {
+        Queue::fake();
+        $this->actingAs($this->user(['page.mintrans-auto']));
+
+        $this->postJson('/mintrans-auto/missing/recheck')->assertStatus(422); // ro'yxat bo'sh
+
+        MintransNotFound::record('01Z001ZZ', MintransNotFound::NOT_FOUND);
+        MintransNotFound::record('75W606KA', MintransNotFound::ERROR, 'timeout');
+
+        $this->postJson('/mintrans-auto/missing/recheck')
+            ->assertStatus(202)
+            ->assertJsonPath('run.file', 'Topilmaganlar (2 ta)')
+            ->assertJsonPath('run.from_missing', true);
+
+        $run = JobRun::latest('id')->first();
+        $this->assertSame('mintrans', $run->operation);
+        $this->assertFalse($run->params['skip_missing']);
+        $this->assertSame([['01Z001ZZ'], ['75W606KA']], IOFactory::load($run->params['file'])->getActiveSheet()->toArray());
+        Queue::assertPushed(RunOperationJob::class);
+
+        // to'liq ish ishlayotgan paytda — ikkinchisi yo'q
+        $this->postJson('/mintrans-auto/missing/recheck')->assertStatus(409);
+        $this->assertSame(1, JobRun::count());
+
+        @unlink($run->params['file']);
+    }
+
+    public function test_recheck_missing_run_removes_found_plates_from_the_list(): void
+    {
+        $this->fakeApi();
+        Http::fake(['orginfo.uz/*' => Http::response('')]);
+        $this->actingAs($this->user(['page.mintrans-auto']));
+        MintransNotFound::record('10S208NB', MintransNotFound::NOT_FOUND); // endi Mintrans'da bor
+        MintransNotFound::record('01Z001ZZ', MintransNotFound::NOT_FOUND);
+
+        $this->postJson('/mintrans-auto/missing/recheck')->assertStatus(202);
+        $run = JobRun::latest('id')->first();
+
+        $this->assertSame(JobRun::SUCCESS, $run->fresh()->status, (string) $run->fresh()->output);
+        $this->assertDatabaseMissing('mintrans_not_found', ['plate' => '10S208NB']);
+        $this->assertSame(2, MintransNotFound::where('plate', '01Z001ZZ')->value('checks'));
+        $rows = $this->rows($run->params['result']);
+        $this->assertSame('OOO "BAXT TRANSPORT"', $rows[2]['E']); // 2-bosqichdan o'tgan
+        $this->assertSame('инн', $rows[1]['N']);                  // 3-bosqichdan o'tgan
+
+        array_map('unlink', array_filter([$run->params['file'], $run->params['result'], $run->params['plates']], 'is_file'));
     }
 
     // --- 2-bosqich ---
@@ -444,7 +493,7 @@ class MintransTest extends TestCase
 
         (new RunOperationJob($run))->handle();
 
-        $this->assertSame(JobRun::SUCCESS, $run->fresh()->status);
+        $this->assertSame(JobRun::SUCCESS, $run->fresh()->status, (string) $run->fresh()->output);
         $rows = $this->rows("{$this->dir}/out/natija.xlsx");
         $this->assertSame('OOO "BAXT TRANSPORT"', $rows[2]['C']);
         $this->assertSame('OOO "T******* A******"', $rows[3]['C']);

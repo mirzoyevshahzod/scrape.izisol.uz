@@ -47,6 +47,7 @@ class MintransController extends Controller
         return view('mintrans.index', [
             'maxUploadMb' => self::effectiveUploadLimitMb(),
             'missingCount' => MintransNotFound::where('status', MintransNotFound::NOT_FOUND)->count(),
+            'missingErrors' => MintransNotFound::where('status', MintransNotFound::ERROR)->count(),
         ]);
     }
 
@@ -102,18 +103,7 @@ class MintransController extends Controller
                 'skip_missing' => $request->boolean('skip_missing'),
             ];
 
-        $run = Cache::lock("operations:run:{$operation}", 10)->block(5, function () use ($request, $operation, $params) {
-            if (JobRun::where('operation', $operation)->active()->exists()) {
-                return null;
-            }
-
-            return JobRun::create([
-                'operation' => $operation,
-                'status' => JobRun::QUEUED,
-                'user_id' => $request->user()->id,
-                'params' => $params,
-            ]);
-        });
+        $run = $this->queueRun($request, $operation, $params);
 
         if (! $run) {
             @unlink("{$dir}/{$name}");
@@ -133,6 +123,56 @@ class MintransController extends Controller
                 'inn' => 'Fayl qabul qilindi: orginfo.uz\'dan INN qo\'shilmoqda.',
                 default => 'Fayl qabul qilindi, tekshiruv navbatga qo\'shildi.',
             },
+            'run' => $this->present($run),
+        ], 202);
+    }
+
+    /**
+     * "Topilmagan raqamlar" bazasidagi barcha raqamlarni (topilmadi va xatolik)
+     * odatdagi to'liq ish sifatida (1 -> 2 -> 3) qayta tekshiradi: ma'lumoti
+     * chiqqanlari ro'yxatdan chiqadi va natija Excel'iga yoziladi.
+     */
+    public function recheckMissing(Request $request): JsonResponse
+    {
+        $plates = MintransNotFound::orderBy('plate')->pluck('plate')->all();
+
+        if (! $plates) {
+            return response()->json(['message' => 'Topilmagan raqamlar ro\'yxati bo\'sh — tekshiradigan narsa yo\'q.'], 422);
+        }
+
+        // 1-bosqich A ustundan o'qiydi — ro'yxat oddiy yuklangan fayl kabi Excel'ga yoziladi
+        $dir = storage_path('app/mintrans/uploads');
+        $file = "{$dir}/" . Str::uuid() . '.xlsx';
+        $book = new Spreadsheet();
+        $sheet = $book->getActiveSheet();
+        foreach ($plates as $i => $plate) {
+            $sheet->setCellValueExplicit('A' . ($i + 1), $plate, DataType::TYPE_STRING);
+        }
+        if (! is_dir($dir)) {
+            mkdir($dir, 0775, true);
+        }
+        (new Xlsx($book))->save($file);
+
+        $resultDir = storage_path('app/mintrans/results');
+        $run = $this->queueRun($request, self::OPERATIONS['full'], [
+            'file' => $file,
+            'original_name' => 'Topilmaganlar (' . count($plates) . ' ta)',
+            'source' => 'missing',
+            'result' => "{$resultDir}/mintrans_topilmaganlar_" . now()->format('Y_m_d_H_i_s') . '.xlsx',
+            'plates' => "{$resultDir}/raqamlar_" . now()->format('Y_m_d_H_i_s') . '.xlsx',
+            'skip_missing' => false,
+        ]);
+
+        if (! $run) {
+            @unlink($file);
+
+            return response()->json(['message' => 'Mintrans tekshiruvi allaqachon ishlayapti — tugashini kuting.'], 409);
+        }
+
+        RunOperationJob::dispatch($run);
+
+        return response()->json([
+            'message' => count($plates) . ' ta topilmagan raqam qayta tekshirish uchun navbatga qo\'shildi.',
             'run' => $this->present($run),
         ], 202);
     }
@@ -282,6 +322,7 @@ class MintransController extends Controller
             'stage' => array_search($run->operation, self::OPERATIONS, true) ?: 'full',
             'file' => $run->params['original_name'] ?? '—',
             'skip_missing' => (bool) ($run->params['skip_missing'] ?? false),
+            'from_missing' => ($run->params['source'] ?? null) === 'missing',
             'status' => $stale ? 'stale' : $run->status,
             'active' => $isActive && ! $stale,
             'progress' => $run->params['progress'] ?? null,
@@ -296,6 +337,23 @@ class MintransController extends Controller
             'duration' => $run->started_at ? $run->started_at->diffInSeconds($run->finished_at ?? now(), true) : null,
             'queued_seconds' => $run->status === JobRun::QUEUED ? (int) $run->created_at->diffInSeconds(now(), true) : null,
         ];
+    }
+
+    /** Shu amal ishlamayotgan bo'lsa yangi ish yaratadi, aks holda null */
+    private function queueRun(Request $request, string $operation, array $params): ?JobRun
+    {
+        return Cache::lock("operations:run:{$operation}", 10)->block(5, function () use ($request, $operation, $params) {
+            if (JobRun::where('operation', $operation)->active()->exists()) {
+                return null;
+            }
+
+            return JobRun::create([
+                'operation' => $operation,
+                'status' => JobRun::QUEUED,
+                'user_id' => $request->user()->id,
+                'params' => $params,
+            ]);
+        });
     }
 
     /** Xato bilan to'xtagan (yoki osilib qolgan) to'liq ish — yuklangan fayl va natija fayli joyida */
