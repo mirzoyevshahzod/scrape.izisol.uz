@@ -21,7 +21,9 @@ use Throwable;
  * 1-bosqich: Excel'ning A ustunidan O'zbekiston avtomobil raqamlarini ajratib
  * (qolgan yozuvlar tashlab yuboriladi), har birini Mintrans API'dan so'raydi.
  *
- * - topildi    -> har bir litsenziya natija Excel'iga alohida qator;
+ * - topildi    -> har bir litsenziya natija Excel'iga alohida qator; raqam
+ *                 "topilmagan raqamlar" ro'yxatida bo'lsa — o'chiriladi va
+ *                 "avval topilmagan, endi topildi" (recovered) deb sanaladi;
  * - topilmadi  -> mintrans_not_found jadvaliga (Excel'ga yozilmaydi);
  * - xatolik    -> mintrans_not_found jadvaliga xato matni bilan + log.
  *
@@ -119,7 +121,9 @@ class MintransScrapeCommand extends Command
         $sheet = $book->getActiveSheet();
         $row = $this->option('resume') ? $sheet->getHighestDataRow() + 1 : 2;
         $total = $done + count($plates);
-        $stats = ['total' => $total, 'done' => $done, 'found' => $found, 'not_found' => $notFound, 'errors' => 0, 'dropped' => $dropped, 'skipped' => $skipped];
+        // davom ettirilganda oldingi qismda "endi topilgan"lar ham hisobda qoladi
+        $recovered = $this->option('resume') ? (int) ($run?->params['progress']['recovered'] ?? 0) : 0;
+        $stats = ['total' => $total, 'done' => $done, 'found' => $found, 'not_found' => $notFound, 'errors' => 0, 'dropped' => $dropped, 'skipped' => $skipped, 'recovered' => $recovered];
         $this->progress($run, $stats, $output);
 
         try {
@@ -135,9 +139,12 @@ class MintransScrapeCommand extends Command
                             $this->writeRow($sheet, $row++, $license);
                         }
 
-                        MintransNotFound::where('plate', $plate)->delete();
+                        // avval topilmagan (yoki xato bergan) bo'lsa — ro'yxatdan chiqadi
+                        $wasMissing = MintransNotFound::where('plate', $plate)->delete() > 0;
                         $stats['found']++;
-                        $this->line($mark('✅') . "ma'lumot chiqdi" . (count($licenses) > 1 ? ' (' . count($licenses) . ' ta litsenziya)' : ''));
+                        $stats['recovered'] += $wasMissing ? 1 : 0;
+                        $this->line($mark('✅') . "ma'lumot chiqdi" . (count($licenses) > 1 ? ' (' . count($licenses) . ' ta litsenziya)' : '')
+                            . ($wasMissing ? " — avval topilmagan edi, ro'yxatdan olib tashlandi" : ''));
                     } else {
                         MintransNotFound::record($plate, MintransNotFound::NOT_FOUND, null, $run?->id);
                         $stats['not_found']++;
@@ -167,7 +174,8 @@ class MintransScrapeCommand extends Command
         }
 
         $this->line('');
-        $this->info("Jami: {$stats['total']} · Topildi: {$stats['found']} · Topilmadi: {$stats['not_found']} · Xatolik: {$stats['errors']}");
+        $this->info("Jami: {$stats['total']} · Topildi: {$stats['found']} · Topilmadi: {$stats['not_found']} · Xatolik: {$stats['errors']}"
+            . ($stats['recovered'] ? " · avval topilmaganlardan endi topildi: {$stats['recovered']}" : ''));
         $this->line("Natija: {$output}");
 
         // hamma so'rov xato bo'lsa (masalan API yopiq) — ish muvaffaqiyatsiz

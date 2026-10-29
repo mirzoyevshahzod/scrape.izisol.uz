@@ -48,6 +48,7 @@ class MintransController extends Controller
             'maxUploadMb' => self::effectiveUploadLimitMb(),
             'missingCount' => MintransNotFound::where('status', MintransNotFound::NOT_FOUND)->count(),
             'missingErrors' => MintransNotFound::where('status', MintransNotFound::ERROR)->count(),
+            'recoveredTotal' => $this->recoveredTotal(),
         ]);
     }
 
@@ -271,6 +272,7 @@ class MintransController extends Controller
         return response()->json([
             'total' => MintransNotFound::where('status', MintransNotFound::NOT_FOUND)->count(),
             'errors' => MintransNotFound::where('status', MintransNotFound::ERROR)->count(),
+            'recovered' => $this->recoveredTotal(),
             'items' => collect($page->items())->map(fn ($row) => [
                 'plate' => $row->plate,
                 'status' => $row->status,
@@ -337,6 +339,13 @@ class MintransController extends Controller
             'duration' => $run->started_at ? $run->started_at->diffInSeconds($run->finished_at ?? now(), true) : null,
             'queued_seconds' => $run->status === JobRun::QUEUED ? (int) $run->created_at->diffInSeconds(now(), true) : null,
         ];
+    }
+
+    /** Barcha to'liq ishlarda "topilmaganlar" ro'yxatidan chiqib, ma'lumoti topilgan raqamlar soni */
+    private function recoveredTotal(): int
+    {
+        return (int) JobRun::where('operation', self::OPERATIONS['full'])->pluck('params')
+            ->sum(fn ($params) => $params['progress']['recovered'] ?? 0);
     }
 
     /** Shu amal ishlamayotgan bo'lsa yangi ish yaratadi, aks holda null */

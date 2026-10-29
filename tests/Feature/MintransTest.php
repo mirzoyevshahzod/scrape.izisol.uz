@@ -150,7 +150,7 @@ class MintransTest extends TestCase
 
         $params = $run->fresh()->params;
         $this->assertSame('a.xlsx', $params['original_name']);
-        $this->assertSame(['total' => 2, 'done' => 2, 'found' => 1, 'not_found' => 1, 'errors' => 0, 'dropped' => 0, 'skipped' => 0], $params['progress']);
+        $this->assertSame(['total' => 2, 'done' => 2, 'found' => 1, 'not_found' => 1, 'errors' => 0, 'dropped' => 0, 'skipped' => 0, 'recovered' => 0], $params['progress']);
     }
 
     public function test_resume_continues_after_checked_plates_and_appends_rows(): void
@@ -190,7 +190,7 @@ class MintransTest extends TestCase
         $this->assertSame('OOO "BAXT TRANSPORT"', $rows[2]['E']); // oldingi qatorlar saqlangan
         $this->assertSame('01A222MC', $rows[3]['D']);
         $this->assertDatabaseMissing('mintrans_not_found', ['plate' => '10S208NB']);
-        $this->assertSame(['total' => 4, 'done' => 4, 'found' => 2, 'not_found' => 2, 'errors' => 0, 'dropped' => 0, 'skipped' => 0], $run->fresh()->params['progress']);
+        $this->assertSame(['total' => 4, 'done' => 4, 'found' => 2, 'not_found' => 2, 'errors' => 0, 'dropped' => 0, 'skipped' => 0, 'recovered' => 0], $run->fresh()->params['progress']);
     }
 
     public function test_resume_endpoint_requeues_failed_full_run(): void
@@ -280,12 +280,25 @@ class MintransTest extends TestCase
 
         $this->assertSame(JobRun::SUCCESS, $run->fresh()->status, (string) $run->fresh()->output);
         $this->assertDatabaseMissing('mintrans_not_found', ['plate' => '10S208NB']);
+        $this->assertSame(1, MintransNotFound::count()); // takror yozuv yo'q — faqat 01Z001ZZ
         $this->assertSame(2, MintransNotFound::where('plate', '01Z001ZZ')->value('checks'));
+        $this->assertSame(1, $run->fresh()->params['progress']['recovered']);
+        $this->assertStringContainsString("10S208NB — ma'lumot chiqdi (2 ta litsenziya) — avval topilmagan edi, ro'yxatdan olib tashlandi", $run->fresh()->output);
+        $this->assertStringContainsString('avval topilmaganlardan endi topildi: 1', $run->fresh()->output);
+        $this->getJson('/mintrans-auto/missing')->assertJsonPath('total', 1)->assertJsonPath('recovered', 1);
+
         $rows = $this->rows($run->params['result']);
         $this->assertSame('OOO "BAXT TRANSPORT"', $rows[2]['E']); // 2-bosqichdan o'tgan
         $this->assertSame('инн', $rows[1]['N']);                  // 3-bosqichdan o'tgan
 
         array_map('unlink', array_filter([$run->params['file'], $run->params['result'], $run->params['plates']], 'is_file'));
+
+        // keyingi qayta tekshiruvda 10S208NB yana so'ralmaydi — takroriy ma'lumot chiqmaydi
+        $this->postJson('/mintrans-auto/missing/recheck')->assertStatus(202);
+        $again = JobRun::latest('id')->first();
+        $this->assertSame([['01Z001ZZ']], IOFactory::load($again->params['file'])->getActiveSheet()->toArray());
+        $this->assertCount(1, $this->rows($again->params['result'])); // faqat sarlavha
+        array_map('unlink', array_filter([$again->params['file'], $again->params['result'], $again->params['plates']], 'is_file'));
     }
 
     // --- 2-bosqich ---

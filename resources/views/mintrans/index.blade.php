@@ -140,6 +140,9 @@
                     </span>
                 </div>
                 <div class="card-body pb-2">
+                    <div class="small text-muted mb-2" id="missing-recovered" title="Ro'yxatda bo'lgan, keyingi tekshiruvlarda ma'lumoti chiqib, ro'yxatdan olib tashlangan raqamlar">
+                        ♻️ Avval topilmagan, keyin ma'lumoti topilgan: <b id="recovered-total">{{ $recoveredTotal }}</b> ta
+                    </div>
                     <input type="search" class="form-control form-control-sm mb-2" id="missing-search" placeholder="Raqam bo'yicha qidirish">
                     <div class="table-responsive">
                         <table class="table table-sm align-middle">
@@ -257,7 +260,8 @@
                     ['❌ Topilmadi', progress.not_found],
                     ['⚠️ Xatolik', progress.errors],
                     ['Tashlab yuborilgan yozuv', progress.dropped],
-                ].concat(progress.skipped ? [['O\'tkazib yuborildi', progress.skipped]] : []).forEach(function ([label, value]) {
+                ].concat(progress.skipped ? [['O\'tkazib yuborildi', progress.skipped]] : [])
+                    .concat(progress.recovered ? [['♻️ Avval topilmagan, endi topildi', progress.recovered]] : []).forEach(function ([label, value]) {
                     const pill = el('span', 'stat-pill');
                     pill.append(el('span', 'text-muted', label + ':'), el('b', null, value));
                     wrap.append(pill);
@@ -410,7 +414,8 @@
                         bar.append(fill);
                         progressCell.append(bar, el('div', 'small text-muted',
                             run.progress.done + '/' + run.progress.total + ' · ✅ ' + run.progress.found + ' · ❌ ' + run.progress.not_found +
-                            (run.progress.errors ? ' · ⚠️ ' + run.progress.errors : '')));
+                            (run.progress.errors ? ' · ⚠️ ' + run.progress.errors : '') +
+                            (run.progress.recovered ? ' · ♻️ ' + run.progress.recovered : '')));
                     } else if (!run.inn) {
                         progressCell.append(el('span', 'text-muted small', '—'));
                     }
@@ -584,6 +589,7 @@
                 missingLast = data.last_page;
                 missingCounts = { notFound: data.total, errors: data.errors };
                 document.getElementById('missing-total').textContent = data.total;
+                document.getElementById('recovered-total').textContent = data.recovered;
                 document.getElementById('recheck-missing-btn').disabled = data.total + data.errors === 0;
                 document.getElementById('missing-page').textContent = data.page + ' / ' + data.last_page;
                 body.replaceChildren();
