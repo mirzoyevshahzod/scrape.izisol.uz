@@ -435,4 +435,21 @@ class MintransTest extends TestCase
         $other = JobRun::create(['operation' => 'mintrans', 'status' => JobRun::RUNNING, 'params' => ['original_name' => 'b.xlsx']]);
         $this->get("/mintrans-auto/runs/{$other->id}/plates")->assertNotFound();
     }
+
+    // --- PHP yuklash chegarasi ---
+
+    public function test_page_shows_real_upload_limit_and_failed_upload_is_explained(): void
+    {
+        $this->actingAs($this->user(['page.mintrans-auto']));
+        $limit = \App\Http\Controllers\MintransController::effectiveUploadLimitMb();
+
+        $this->assertLessThanOrEqual(10, $limit);
+        $this->get('/mintrans-auto')->assertOk()->assertSee(($limit + 0) . ' MB gacha');
+
+        // PHP faylni qabul qilmagan holat (upload_max_filesize'dan katta)
+        $tooBig = new UploadedFile($this->inputFile(['10S208NB']), 'katta.xlsx', null, UPLOAD_ERR_INI_SIZE, true);
+        $this->post('/mintrans-auto/start', ['file' => $tooBig], ['Accept' => 'application/json'])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['file' => 'upload_max_filesize']);
+    }
 }

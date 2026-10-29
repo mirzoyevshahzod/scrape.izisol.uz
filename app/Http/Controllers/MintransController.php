@@ -36,9 +36,13 @@ class MintransController extends Controller
     /** natija fayli nomiga qo'shimcha (2- va 3-bosqichdan boshlanganda) */
     private const SUFFIXES = ['names' => '_formatlangan', 'inn' => '_inn'];
 
+    /** Ilovaning o'z chegarasi (validatsiya: max:10240) */
+    private const MAX_UPLOAD_MB = 10;
+
     public function index(): View
     {
         return view('mintrans.index', [
+            'maxUploadMb' => self::effectiveUploadLimitMb(),
             'missingCount' => MintransNotFound::where('status', MintransNotFound::NOT_FOUND)->count(),
         ]);
     }
@@ -53,6 +57,9 @@ class MintransController extends Controller
             'file.required' => 'Excel faylni tanlang.',
             'file.mimes' => 'Faqat .xlsx, .xls yoki .csv fayl.',
             'file.max' => 'Fayl 10 MB dan oshmasin.',
+            // PHP faylni umuman qabul qilmagan (odatda upload_max_filesize / post_max_size'dan katta)
+            'file.uploaded' => 'Fayl serverga yuklanmadi: hajmi serverning PHP chegarasidan katta ('
+                . self::effectiveUploadLimitMb() . ' MB). Administrator PHP\'da upload_max_filesize va post_max_size\'ni oshirishi kerak.',
         ]);
 
         $stage = $request->input('stage', 'full');
@@ -264,5 +271,37 @@ class MintransController extends Controller
         $base = preg_replace('/[^\p{L}\p{N}_-]+/u', '_', pathinfo($original, PATHINFO_FILENAME));
 
         return trim(mb_substr($base, 0, 100), '_') ?: 'natija';
+    }
+
+    /**
+     * Haqiqatda yuklash mumkin bo'lgan eng katta hajm (MB): ilova chegarasi va
+     * PHP'ning upload_max_filesize / post_max_size qiymatlarining eng kichigi.
+     */
+    public static function effectiveUploadLimitMb(): float
+    {
+        $toMb = function (string $value): float {
+            $value = trim($value);
+            $number = (float) $value;
+
+            return match (strtoupper(substr($value, -1))) {
+                'G' => $number * 1024,
+                'M' => $number,
+                'K' => $number / 1024,
+                default => $number / 1048576,
+            };
+        };
+
+        $limits = [self::MAX_UPLOAD_MB];
+
+        foreach (['upload_max_filesize', 'post_max_size'] as $key) {
+            $value = (string) ini_get($key);
+
+            // 0 yoki bo'sh — PHP'da cheklov yo'q
+            if ($value !== '' && $toMb($value) > 0) {
+                $limits[] = $toMb($value);
+            }
+        }
+
+        return round(min($limits), 1);
     }
 }

@@ -101,7 +101,7 @@
                         <label class="dropzone" for="file-input" id="dropzone">
                             <i class="fas fa-cloud-arrow-up"></i>
                             <span class="dropzone-file" id="file-name">Excel faylni tanlang yoki shu yerga tashlang</span>
-                            <span class="small">.xlsx, .xls, .csv · 10 MB gacha</span>
+                            <span class="small">.xlsx, .xls, .csv · {{ $maxUploadMb + 0 }} MB gacha</span>
                         </label>
                         <input type="file" id="file-input" name="file" accept=".xlsx,.xls,.csv" class="d-none">
 
@@ -196,6 +196,9 @@
 @push('scripts')
     <script>
         (function () {
+            // serverning haqiqiy yuklash chegarasi (PHP upload_max_filesize / post_max_size hisobga olingan)
+            const MAX_UPLOAD_MB = @json($maxUploadMb);
+
             const urls = {
                 start: @json(route('mintrans.start')),
                 runs: @json(route('mintrans.runs')),
@@ -336,6 +339,13 @@
             document.getElementById('start-form').addEventListener('submit', async function (e) {
                 e.preventDefault();
                 if (!fileInput.files[0]) return;
+
+                const sizeMb = fileInput.files[0].size / 1048576;
+                if (sizeMb > MAX_UPLOAD_MB) {
+                    uiToast('Fayl ' + sizeMb.toFixed(1) + ' MB — serverga ' + MAX_UPLOAD_MB + ' MB gacha yuklash mumkin. '
+                        + 'Administrator PHP\'da upload_max_filesize va post_max_size\'ni oshirishi kerak.', 'danger');
+                    return;
+                }
 
                 const form = new FormData();
                 form.append('file', fileInput.files[0]);
