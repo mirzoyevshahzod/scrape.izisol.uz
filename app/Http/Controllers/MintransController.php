@@ -137,6 +137,47 @@ class MintransController extends Controller
         ], 202);
     }
 
+    /**
+     * To'xtab qolgan to'liq ishni (1 -> 2 -> 3) shu yozuvning o'zida davom ettiradi:
+     * 1-bosqich natija faylida yoki "topilmadi" ro'yxatida bo'lmagan raqamlardan
+     * boshlaydi va qatorlarni fayl oxiriga qo'shadi; 2- va 3-bosqich butun
+     * fayl bo'yicha qaytadan o'tadi (formatlash takrorlansa o'zgarmaydi, INN'lar bazada).
+     */
+    public function resume(Request $request, JobRun $run): JsonResponse
+    {
+        abort_unless($run->operation === self::OPERATIONS['full'], 404);
+
+        if (! $this->resumable($run)) {
+            return response()->json(['message' => 'Bu ishni davom ettirib bo\'lmaydi: u tugallanmagan yoki fayllari topilmadi.'], 422);
+        }
+
+        $resumed = Cache::lock("operations:run:{$run->operation}", 10)->block(5, function () use ($run) {
+            if (JobRun::where('operation', $run->operation)->active()->exists()) {
+                return false;
+            }
+
+            $params = $run->params;
+            $params['resume'] = true;
+            unset($params['inn']);
+
+            $run->appendOutput("\n— Davom ettirildi [" . now()->format('Y-m-d H:i:s') . "] —\n");
+            $run->update(['status' => JobRun::QUEUED, 'params' => $params, 'finished_at' => null]);
+
+            return true;
+        });
+
+        if (! $resumed) {
+            return response()->json(['message' => 'Mintrans tekshiruvi allaqachon ishlayapti — tugashini kuting.'], 409);
+        }
+
+        RunOperationJob::dispatch($run);
+
+        return response()->json([
+            'message' => "#{$run->id} davom ettirilmoqda: tekshirilmagan raqamlardan boshlanadi.",
+            'run' => $this->present($run->fresh()),
+        ], 202);
+    }
+
     public function runs(): JsonResponse
     {
         $runs = JobRun::with('user:id,name')->whereIn('operation', self::OPERATIONS)->latest('id')->limit(20)->get();
@@ -247,6 +288,7 @@ class MintransController extends Controller
             'inn' => $run->params['inn'] ?? null,
             'downloadable' => ! $isActive && $result && is_file($result),
             'plates_ready' => ! empty($run->params['plates']) && is_file($run->params['plates']),
+            'resumable' => $this->resumable($run),
             'user' => $run->user?->name,
             'created_at' => $run->created_at?->format('Y-m-d H:i:s'),
             'started_at' => $run->started_at?->format('Y-m-d H:i:s'),
@@ -254,6 +296,18 @@ class MintransController extends Controller
             'duration' => $run->started_at ? $run->started_at->diffInSeconds($run->finished_at ?? now(), true) : null,
             'queued_seconds' => $run->status === JobRun::QUEUED ? (int) $run->created_at->diffInSeconds(now(), true) : null,
         ];
+    }
+
+    /** Xato bilan to'xtagan (yoki osilib qolgan) to'liq ish — yuklangan fayl va natija fayli joyida */
+    private function resumable(JobRun $run): bool
+    {
+        $stale = in_array($run->status, [JobRun::QUEUED, JobRun::RUNNING], true)
+            && $run->updated_at?->lt(now()->subMinutes(JobRun::STALE_AFTER_MINUTES));
+
+        return $run->operation === self::OPERATIONS['full']
+            && ($run->status === JobRun::FAILED || $stale)
+            && is_file($run->params['file'] ?? '')
+            && is_file($run->params['result'] ?? '');
     }
 
     private function hasCompanyColumn(string $path): bool

@@ -418,6 +418,15 @@
                     resultBtn.addEventListener('click', function () { openOutput(run.id, run.file); });
                     actions.append(resultBtn);
 
+                    if (run.resumable) {
+                        const resumeBtn = el('button', 'btn btn-sm btn-warning ms-1');
+                        resumeBtn.type = 'button';
+                        resumeBtn.title = 'To\'xtagan joyidan davom ettirish';
+                        resumeBtn.append(el('i', 'fas fa-play me-1'), document.createTextNode('Davom ettirish'));
+                        resumeBtn.addEventListener('click', function () { resumeRun(run); });
+                        actions.append(resumeBtn);
+                    }
+
                     if (run.plates_ready) {
                         const platesLink = el('a', 'btn btn-sm btn-light ms-1');
                         platesLink.href = urls.run + '/' + run.id + '/plates';
@@ -453,6 +462,33 @@
                         actions
                     );
                     body.append(row);
+                });
+            }
+
+            function resumeRun(run) {
+                const done = run.progress ? run.progress.done + ' / ' + run.progress.total : null;
+
+                uiConfirm({
+                    title: '#' + run.id + ' davom ettirilsinmi?',
+                    message: (done ? '1-bosqich ' + done + ' joyidan davom etadi' : '1-bosqich to\'xtagan joyidan davom etadi')
+                        + ': natija faylida bor va "topilmadi" deb yozilgan raqamlar qayta so\'ralmaydi, yangi qatorlar shu faylga qo\'shiladi. '
+                        + 'Keyin 2- va 3-bosqich butun fayl bo\'yicha boshidan ishlaydi.',
+                    icon: 'fa-play',
+                    confirmText: 'Davom ettirish',
+                    onConfirm: async function () {
+                        const response = await fetch(urls.run + '/' + run.id + '/resume', {
+                            method: 'POST',
+                            headers: { Accept: 'application/json' },
+                        });
+                        const data = await response.json().catch(function () { return {}; });
+
+                        if (!response.ok) return data.message || 'Xatolik: HTTP ' + response.status;
+
+                        uiToast(data.message, 'success');
+                        refresh();
+                        openOutput(run.id, run.file);
+                        return true;
+                    },
                 });
             }
 

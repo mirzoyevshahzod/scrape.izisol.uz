@@ -153,6 +153,92 @@ class MintransTest extends TestCase
         $this->assertSame(['total' => 2, 'done' => 2, 'found' => 1, 'not_found' => 1, 'errors' => 0, 'dropped' => 0, 'skipped' => 0], $params['progress']);
     }
 
+    public function test_resume_continues_after_checked_plates_and_appends_rows(): void
+    {
+        // 1-urinishda 75W606KA'da server xatosi, davom ettirishda — topilmadi
+        $resumed = false;
+        Http::fake(function ($request) use (&$resumed) {
+            return match ($request['autoN']) {
+                '10S208NB' => Http::response(['data' => MintransClientTest::html('Rusumi: MAN TGX', [
+                    ['license' => 'AT 10437261', 'plate' => '10S208NB', 'company' => 'МЧЖ "BAXT TRANSPORT" MAS\'ULIYATI CHEKLANGAN JAMIYAT'],
+                ])]),
+                '01A222MC' => Http::response(['data' => MintransClientTest::html('Rusumi: ISUZU', [['license' => 'AT 1', 'plate' => '01A222MC', 'company' => 'OOO "YANGI"']])]),
+                '75W606KA' => $resumed ? Http::response(['data' => null]) : Http::response('down', 500),
+                default => Http::response(['data' => null]),
+            };
+        });
+        $run = JobRun::create(['operation' => 'mintrans', 'status' => JobRun::FAILED, 'params' => []]);
+        $output = "{$this->dir}/result.xlsx";
+
+        // birinchi urinish faqat 10S208NB va 01Z001ZZ'gacha yetgan; 75W606KA xato bo'lgan
+        $this->artisan('mintrans:scrape', ['file' => $this->inputFile(['10S208NB', '01Z001ZZ', '75W606KA']), '--output' => $output, '--run' => $run->id])
+            ->assertSuccessful();
+        $this->artisan('mintrans:clean-names', ['file' => $output])->assertSuccessful(); // 2-bosqich ham o'tib bo'lgan
+        MintransNotFound::record('10S208NB', MintransNotFound::ERROR, 'log xatosi', $run->id); // topilgan, lekin xato deb yozilib qolgan
+        $resumed = true;
+        $sentBefore = Http::recorded()->count();
+
+        $this->artisan('mintrans:scrape', ['file' => $this->inputFile(['10S208NB', '01Z001ZZ', '75W606KA', '01A222MC']), '--output' => $output, '--run' => $run->id, '--resume' => true])
+            ->expectsOutputToContain('Davom ettirish: allaqachon tekshirilgan 2 ta (topildi 1, topilmadi 1); qoldi: 2 ta')
+            ->expectsOutputToContain("❌ [3/4] 75W606KA — ma'lumot chiqmadi")
+            ->expectsOutputToContain("✅ [4/4] 01A222MC — ma'lumot chiqdi")
+            ->assertSuccessful();
+
+        $this->assertSame(2, Http::recorded()->count() - $sentBefore); // 10S208NB va 01Z001ZZ qayta so'ralmadi
+        $rows = $this->rows($output);
+        $this->assertCount(3, $rows);
+        $this->assertSame('OOO "BAXT TRANSPORT"', $rows[2]['E']); // oldingi qatorlar saqlangan
+        $this->assertSame('01A222MC', $rows[3]['D']);
+        $this->assertDatabaseMissing('mintrans_not_found', ['plate' => '10S208NB']);
+        $this->assertSame(['total' => 4, 'done' => 4, 'found' => 2, 'not_found' => 2, 'errors' => 0, 'dropped' => 0, 'skipped' => 0], $run->fresh()->params['progress']);
+    }
+
+    public function test_resume_endpoint_requeues_failed_full_run(): void
+    {
+        Queue::fake();
+        $this->actingAs($this->user(['page.mintrans-auto']));
+        $input = $this->inputFile(['10S208NB']);
+        $result = $this->inputFile(['Rusumi']);
+        $run = JobRun::create(['operation' => 'mintrans', 'status' => JobRun::FAILED, 'output' => 'eski log', 'finished_at' => now(),
+            'params' => ['file' => $input, 'result' => $result, 'original_name' => 'a.xlsx', 'inn' => ['total' => 5, 'done' => 1]]]);
+
+        $this->getJson('/mintrans-auto/runs')->assertJsonPath('runs.0.resumable', true);
+
+        $this->postJson("/mintrans-auto/runs/{$run->id}/resume")->assertStatus(202);
+
+        $run->refresh();
+        $this->assertSame(JobRun::QUEUED, $run->status);
+        $this->assertNull($run->finished_at);
+        $this->assertTrue($run->params['resume']);
+        $this->assertArrayNotHasKey('inn', $run->params);
+        $this->assertStringContainsString('eski log', $run->output);
+        $this->assertStringContainsString('Davom ettirildi', $run->output);
+        Queue::assertPushed(RunOperationJob::class);
+        $this->assertSame(['file' => $input, '--output' => $result, '--run' => $run->id, '--resume' => true], RunOperationJob::commandsFor($run)[0][1]);
+
+        // endi navbatda — qayta bosib bo'lmaydi
+        $this->postJson("/mintrans-auto/runs/{$run->id}/resume")->assertStatus(422);
+    }
+
+    public function test_resume_refused_for_finished_or_missing_files_or_other_stages(): void
+    {
+        $this->actingAs($this->user(['page.mintrans-auto']));
+        $input = $this->inputFile(['10S208NB']);
+
+        $ok = JobRun::create(['operation' => 'mintrans', 'status' => JobRun::SUCCESS, 'params' => ['file' => $input, 'result' => $input]]);
+        $gone = JobRun::create(['operation' => 'mintrans', 'status' => JobRun::FAILED, 'params' => ['file' => $input, 'result' => '/yoq.xlsx']]);
+        $names = JobRun::create(['operation' => 'mintrans-names', 'status' => JobRun::FAILED, 'params' => ['file' => $input, 'result' => $input]]);
+
+        $this->postJson("/mintrans-auto/runs/{$ok->id}/resume")->assertStatus(422);
+        $this->postJson("/mintrans-auto/runs/{$gone->id}/resume")->assertStatus(422);
+        $this->postJson("/mintrans-auto/runs/{$names->id}/resume")->assertNotFound();
+
+        // boshqa to'liq ish ishlayotgan bo'lsa — 409
+        $failed = JobRun::create(['operation' => 'mintrans', 'status' => JobRun::FAILED, 'params' => ['file' => $input, 'result' => $input]]);
+        JobRun::create(['operation' => 'mintrans', 'status' => JobRun::RUNNING, 'params' => []]);
+        $this->postJson("/mintrans-auto/runs/{$failed->id}/resume")->assertStatus(409);
+    }
+
     // --- 2-bosqich ---
 
     public function test_clean_names_formats_company_column(): void

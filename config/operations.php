@@ -101,7 +101,7 @@ return [
             'hidden' => true,
             'timeout' => 28800, // 8 soat: katta fayl (~7 600 raqam) 1–3-bosqichlarda ~4.5 soat
             'commands' => [
-                ['mintrans:scrape', ['file' => '{file}', '--output' => '{result}', '--run' => '{run}', '--skip-known-missing' => '{skip_missing}', '--plates-output' => '{plates}']],
+                ['mintrans:scrape', ['file' => '{file}', '--output' => '{result}', '--run' => '{run}', '--skip-known-missing' => '{skip_missing}', '--plates-output' => '{plates}', '--resume' => '{resume}']],
                 ['mintrans:clean-names', ['file' => '{result}']],
                 ['mintrans:inn', ['file' => '{result}', '--run' => '{run}']],
             ],

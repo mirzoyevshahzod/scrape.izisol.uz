@@ -36,7 +36,8 @@ class MintransScrapeCommand extends Command
                             {--delay=300 : So\'rovlar orasidagi pauza, ms (davlat saytini yuklamaslik uchun kamida 300)}
                             {--skip-known-missing : Avval "topilmadi" deb yozilgan raqamlarni qayta so\'ramaslik}
                             {--run= : Boshqaruv ishi (job_runs.id) — jarayon shu yozuvga yozib boriladi}
-                            {--plates-output= : Ajratilgan avtoraqamlar ro\'yxatini (so\'rovlardan oldin) shu Excel faylga yozish}';
+                            {--plates-output= : Ajratilgan avtoraqamlar ro\'yxatini (so\'rovlardan oldin) shu Excel faylga yozish}
+                            {--resume : To\'xtab qolgan ishni davom ettirish: --output faylidagi va shu ish (--run) uchun "topilmadi" deb yozilgan raqamlar qayta so\'ralmaydi, yangi qatorlar fayl oxiriga qo\'shiladi}';
 
     protected $description = 'Excel\'dagi O\'zbekiston avtoraqamlari bo\'yicha Mintrans litsenziya ma\'lumotlarini oladi (1-bosqich)';
 
@@ -100,14 +101,30 @@ class MintransScrapeCommand extends Command
             . ($skipped ? "; avval topilmagani uchun o'tkazib yuborildi: {$skipped} ta" : ''));
 
         $book = $this->newBook();
+        $done = $found = $notFound = 0;
+
+        if ($this->option('resume')) {
+            if (! is_file($output)) {
+                $this->error("Davom ettirish uchun natija fayli topilmadi: {$output}");
+
+                return self::FAILURE;
+            }
+
+            $book = IOFactory::load($output);
+            [$plates, $done, $found, $notFound] = $this->remainingPlates($plates, $book, $run);
+
+            $this->line("Davom ettirish: allaqachon tekshirilgan {$done} ta (topildi {$found}, topilmadi {$notFound}); qoldi: " . count($plates) . ' ta');
+        }
+
         $sheet = $book->getActiveSheet();
-        $row = 2;
-        $stats = ['total' => count($plates), 'done' => 0, 'found' => 0, 'not_found' => 0, 'errors' => 0, 'dropped' => $dropped, 'skipped' => $skipped];
+        $row = $this->option('resume') ? $sheet->getHighestDataRow() + 1 : 2;
+        $total = $done + count($plates);
+        $stats = ['total' => $total, 'done' => $done, 'found' => $found, 'not_found' => $notFound, 'errors' => 0, 'dropped' => $dropped, 'skipped' => $skipped];
         $this->progress($run, $stats, $output);
 
         try {
             foreach ($plates as $i => $plate) {
-                $prefix = '[' . ($i + 1) . '/' . count($plates) . "] {$plate} — ";
+                $prefix = '[' . ($done + $i + 1) . "/{$total}] {$plate} — ";
                 $mark = fn (string $icon) => "{$icon} {$prefix}";
 
                 try {
@@ -231,6 +248,44 @@ class MintransScrapeCommand extends Command
         } finally {
             $reader->close();
         }
+    }
+
+    /**
+     * Davom ettirishda hali tekshirilmagan raqamlar (kiritilish tartibida).
+     *
+     * Tekshirilgan deb hisoblanadi: natija faylining "Davlat raqami" (D)
+     * ustunida bor (topilgan) yoki shu ish uchun "topilmadi" deb yozilgan.
+     * Xato bilan tugaganlari qayta so'raladi.
+     *
+     * @return array{0:array<int,string>,1:int,2:int,3:int} [qolganlar, tekshirilgan, topilgan, topilmagan]
+     */
+    private function remainingPlates(array $plates, Spreadsheet $book, ?JobRun $run): array
+    {
+        $sheet = $book->getActiveSheet();
+        $inResult = [];
+
+        for ($row = 2, $last = $sheet->getHighestDataRow(); $row <= $last; $row++) {
+            foreach (UzbekPlates::extract((string) $sheet->getCell("D{$row}")->getValue()) as $plate) {
+                $inResult[$plate] = true;
+            }
+        }
+
+        // topilgan, lekin to'xtash paytida xato deb yozilib qolganlar (masalan log xatosi) — ro'yxatdan chiqadi
+        if ($inResult) {
+            foreach (array_chunk(array_keys($inResult), 500) as $chunk) {
+                MintransNotFound::whereIn('plate', $chunk)->delete();
+            }
+        }
+
+        $missing = $run
+            ? array_flip(MintransNotFound::where('job_run_id', $run->id)->where('status', MintransNotFound::NOT_FOUND)->pluck('plate')->all())
+            : [];
+
+        $found = count(array_filter($plates, fn ($p) => isset($inResult[$p])));
+        $notFound = count(array_filter($plates, fn ($p) => ! isset($inResult[$p]) && isset($missing[$p])));
+        $remaining = array_values(array_filter($plates, fn ($p) => ! isset($inResult[$p]) && ! isset($missing[$p])));
+
+        return [$remaining, $found + $notFound, $found, $notFound];
     }
 
     /** Ajratilgan raqamlar ro'yxati — uzoq jarayon boshlanishidan oldin tekshirib olish uchun */
