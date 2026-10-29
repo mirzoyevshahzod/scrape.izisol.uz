@@ -9,6 +9,7 @@ use App\Support\UzbekPlates;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Sleep;
+use OpenSpout\Reader\XLSX\Reader as XlsxReader;
 use PhpOffice\PhpSpreadsheet\Cell\DataType;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
@@ -77,7 +78,7 @@ class MintransScrapeCommand extends Command
 
         $this->info("1-bosqich: Mintrans'dan ma'lumot olish");
 
-        // ~300 ming qatorli faylni o'qish ~300 MB oladi
+        // natija Excel'i (minglab litsenziya qatori) PhpSpreadsheet'da xotirada turadi
         $this->ensureMemoryLimit(1024);
 
         [$plates, $dropped, $rows] = $this->readPlates($file);
@@ -164,13 +165,12 @@ class MintransScrapeCommand extends Command
      */
     private function readPlates(string $file): array
     {
-        $sheet = IOFactory::load($file)->getActiveSheet();
         $plates = [];
         $dropped = 0;
         $rows = 0;
 
-        foreach ($sheet->getRowIterator() as $excelRow) {
-            $value = trim((string) $sheet->getCell('A' . $excelRow->getRowIndex())->getFormattedValue());
+        foreach ($this->columnA($file) as $value) {
+            $value = trim($value);
 
             if ($value === '') {
                 continue;
@@ -192,6 +192,45 @@ class MintransScrapeCommand extends Command
         }
 
         return [array_keys($plates), $dropped, $rows];
+    }
+
+    /**
+     * Faylning A ustunidagi qiymatlar, qatorma-qator.
+     *
+     * .xlsx oqim bilan o'qiladi (OpenSpout): ~300 ming qatorli fayl uchun
+     * PhpSpreadsheet butun varaqni xotiraga oladi (~1.7 GB), OpenSpout esa
+     * bir necha o'n MB bilan ishlaydi. .xls/.csv (odatda kichik) — PhpSpreadsheet.
+     *
+     * @return \Generator<int,string>
+     */
+    private function columnA(string $file): \Generator
+    {
+        if (strtolower(pathinfo($file, PATHINFO_EXTENSION)) !== 'xlsx') {
+            $sheet = IOFactory::load($file)->getActiveSheet();
+
+            foreach ($sheet->getRowIterator() as $excelRow) {
+                yield (string) $sheet->getCell('A' . $excelRow->getRowIndex())->getFormattedValue();
+            }
+
+            return;
+        }
+
+        $reader = new XlsxReader();
+        $reader->open($file);
+
+        try {
+            $sheets = iterator_to_array($reader->getSheetIterator(), false);
+            // Excel'da faol bo'lgan varaq (PhpSpreadsheet getActiveSheet() kabi), bo'lmasa birinchisi
+            $sheet = collect($sheets)->first(fn ($s) => $s->isActive()) ?? $sheets[0];
+
+            foreach ($sheet->getRowIterator() as $row) {
+                $value = $row->getCellAtIndex(0)?->getValue();
+
+                yield $value instanceof \DateTimeInterface ? $value->format('Y-m-d') : (string) $value;
+            }
+        } finally {
+            $reader->close();
+        }
     }
 
     /** Ajratilgan raqamlar ro'yxati — uzoq jarayon boshlanishidan oldin tekshirib olish uchun */
