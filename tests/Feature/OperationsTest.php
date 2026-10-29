@@ -336,4 +336,42 @@ class OperationsTest extends TestCase
             ->expectsOutputToContain("--only noto'g'ri: nope")
             ->assertFailed();
     }
+
+    // --- log (job_runs.output) ---
+
+    public function test_long_output_is_truncated_on_utf8_and_line_boundaries(): void
+    {
+        $run = new JobRun(['operation' => 'mintrans']);
+
+        // "—" 3 baytli belgi: bayt bo'yicha kesish uni bo'lib, MySQL'da "Incorrect string value" xatosini berardi
+        for ($i = 1; $i <= 30000; $i++) {
+            $run->appendOutput("✅ [{$i}/30000] 70U356BB — ma'lumot chiqdi\n");
+        }
+
+        $this->assertTrue(mb_check_encoding($run->output, 'UTF-8'));
+        $this->assertLessThanOrEqual(JobRun::MAX_OUTPUT_BYTES + 64, strlen($run->output));
+        $this->assertSame(1, substr_count($run->output, 'qisqartirildi'));
+        $this->assertStringStartsWith("…(boshi qisqartirildi)…\n✅ [", $run->output); // to'liq qatordan boshlanadi
+        $this->assertStringEndsWith("✅ [30000/30000] 70U356BB — ma'lumot chiqdi\n", $run->output);
+
+        $tail = $run->outputTail(1000);
+        $this->assertTrue(mb_check_encoding($tail, 'UTF-8'));
+        $this->assertLessThan(1100, strlen($tail));
+
+        $broken = new JobRun();
+        $broken->appendOutput("buzilgan \x94 bayt\n");
+        $this->assertTrue(mb_check_encoding($broken->output, 'UTF-8'));
+    }
+
+    public function test_failing_log_save_does_not_stop_the_command(): void
+    {
+        $run = \Mockery::mock(JobRun::class)->makePartial();
+        $run->shouldReceive('save')->andThrow(new \RuntimeException('Incorrect string value'));
+
+        $output = new \App\Support\Operations\JobRunOutput($run);
+        $output->writeln("✅ [1/1] 10S208NB — ma'lumot chiqdi");
+        $output->flush();
+
+        $this->assertStringContainsString('10S208NB', $run->output); // xato chiqmadi, matn yo'qolmadi
+    }
 }

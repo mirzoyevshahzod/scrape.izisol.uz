@@ -36,6 +36,9 @@ class MintransController extends Controller
     /** natija fayli nomiga qo'shimcha (2- va 3-bosqichdan boshlanganda) */
     private const SUFFIXES = ['names' => '_formatlangan', 'inn' => '_inn'];
 
+    /** "Natija" oynasi har 2 s so'raydi — butun log (1 MB gacha) emas, oxirgi qismi */
+    private const OUTPUT_TAIL_BYTES = 300_000;
+
     /** Ilovaning o'z chegarasi (validatsiya: max:10240) */
     private const MAX_UPLOAD_MB = 10;
 
@@ -145,7 +148,7 @@ class MintransController extends Controller
     {
         abort_unless(in_array($run->operation, self::OPERATIONS, true), 404);
 
-        return response()->json($this->present($run) + ['output' => $run->output ?? '']);
+        return response()->json($this->present($run) + ['output' => $run->outputTail(self::OUTPUT_TAIL_BYTES)]);
     }
 
     public function download(JobRun $run): BinaryFileResponse

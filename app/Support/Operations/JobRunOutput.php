@@ -3,7 +3,9 @@
 namespace App\Support\Operations;
 
 use App\Models\JobRun;
+use Illuminate\Support\Facades\Log;
 use Symfony\Component\Console\Output\Output;
+use Throwable;
 
 /**
  * Artisan buyrug'ining chiqishini JobRun->output'ga yozib boradi.
@@ -37,8 +39,14 @@ class JobRunOutput extends Output
         }
 
         $this->run->appendOutput($this->buffer);
-        $this->run->save();
         $this->buffer = '';
         $this->lastFlush = microtime(true);
+
+        // log — yordamchi ma'lumot: saqlab bo'lmasa ham buyruq (asosiy ish) to'xtamasin
+        try {
+            $this->run->save();
+        } catch (Throwable $e) {
+            Log::warning('JobRun output saqlanmadi', ['run' => $this->run->id, 'error' => $e->getMessage()]);
+        }
     }
 }

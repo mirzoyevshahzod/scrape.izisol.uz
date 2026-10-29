@@ -106,7 +106,7 @@ class OperationController extends Controller
     {
         abort_unless(array_key_exists($run->operation, $this->allowedOperations($request)), 403);
 
-        return response()->json($this->present($run) + ['output' => $run->output ?? '']);
+        return response()->json($this->present($run) + ['output' => $run->outputTail(300_000)]);
     }
 
     /** @return array<string,array> foydalanuvchi Boshqaruv'da ishga tushira oladigan amallar (yashirinlarsiz) */
