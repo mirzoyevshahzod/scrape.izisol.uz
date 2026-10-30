@@ -2,19 +2,16 @@
 
 namespace App\Console\Commands;
 
-use App\Models\CrmToken;
+use App\Services\EgsCrmAuthException;
+use App\Services\EgsCrmClient;
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\Artisan;
-use Illuminate\Support\Facades\Http;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
-use RuntimeException;
-use Symfony\Component\DomCrawler\Crawler;
 use Throwable;
 
 /**
- * Excel'dagi har bir mashina raqami bo'yicha Zanjeer CRM'dagi zakazlarni
- * (/orders/orders?filter[search]=...) qidirib, ularda eng ko'p qatnashgan
+ * Excel'dagi har bir mashina raqami bo'yicha EGS CRM buyurtmalarini
+ * (API: GET /orders?search=...) olib, ularda eng ko'p qatnashgan
  * OPERATION menejerini oxirgi "Manager" ustuniga yozadi, so'ng qatorlarni
  * kompaniya nomi bo'yicha alifbo tartibida saralab, faylni joyida (yoki
  * --output berilsa o'sha yerga) saqlaydi.
@@ -24,14 +21,13 @@ use Throwable;
  * avtomatik aniqlanadi. Kompaniya ustuni bo'lmasa (masalan kazakhstan-china),
  * faqat Manager qo'shiladi, saralanmaydi.
  *
- * CRM'da zakazlar uchun JSON API yo'q — sahifa HTML bo'lib keladi va har
- * bir zakaz alohida karta. Bitta asosiy zakaz va uning sub-zakazlarida
- * (#KGS..., #TLS...) operation bir xil, shuning uchun har bir asosiy zakaz
- * (root) bir marta sanaladi.
+ * API har bir sub-buyurtmani alohida qaytaradi; asosiy buyurtma va uning
+ * sub-buyurtmalarida operation bir xil, shuning uchun har bir asosiy
+ * buyurtma (parent_order_id) bir marta sanaladi. Qidiruv umumiy (yuk nomi,
+ * marshrut ham) — faqat avtomobil raqami mos kelganlari olinadi.
  *
- * Sessiya `crm_tokens` jadvalidan olinadi (`crm:login`). Eskirgan bo'lsa,
- * bir marta `crm:login` qilib qayta uriniladi; bu ham o'xshamasa, qolgan
- * raqamlar so'ralmaydi (Manager bo'sh qoladi), fayl baribir saralanadi.
+ * API kaliti noto'g'ri bo'lsa, qolgan raqamlar so'ralmaydi (Manager bo'sh
+ * qoladi), fayl baribir saralanadi.
  */
 class FillPlateOperatorsCommand extends Command
 {
@@ -40,13 +36,9 @@ class FillPlateOperatorsCommand extends Command
                             {--output= : Natijani shu faylga yozish (bo\'sh bo\'lsa asl fayl ustidan yoziladi)}
                             {--plate-column= : Mashina raqami ustuni sarlavhasi (bo\'sh bo\'lsa avtomatik)}
                             {--sort-column= : Saralash ustuni sarlavhasi (bo\'sh bo\'lsa avtomatik)}
-                            {--delay=500 : So\'rovlar orasidagi pauza (ms)}';
+                            {--delay=0 : So\'rovlar orasidagi qo\'shimcha pauza, ms (API chegarasi — 120/daqiqa — klientda hisobga olingan)}';
 
-    protected $description = 'Mashina raqami bo\'yicha Zanjeer CRM zakazlaridan eng ko\'p OPERATION menejerni topib, "Manager" ustuniga yozadi va Company bo\'yicha saralaydi';
-
-    private const ORDERS_URL = 'https://crm.zanjeer.uz/orders/orders';
-
-    private const PER_PAGE = 20;
+    protected $description = 'Mashina raqami bo\'yicha EGS CRM buyurtmalaridan eng ko\'p OPERATION menejerni topib, "Manager" ustuniga yozadi va Company bo\'yicha saralaydi';
 
     private const MANAGER_HEADER = 'Manager';
 
@@ -56,14 +48,10 @@ class FillPlateOperatorsCommand extends Command
 
     private const COMPANY_HEADERS = ['Company', 'Company Name'];
 
-    private array $cookies = [];
-
-    private bool $reloggedIn = false;
-
-    /** CRM'ga kirib bo'lmasa true — qolgan raqamlar uchun so'rov yuborilmaydi */
+    /** API kaliti ishlamasa true — qolgan raqamlar uchun so'rov yuborilmaydi */
     private bool $sessionBroken = false;
 
-    public function handle(): int
+    public function handle(EgsCrmClient $crm): int
     {
         $file = $this->argument('file');
         $output = $this->option('output') ?: $file;
@@ -109,12 +97,6 @@ class FillPlateOperatorsCommand extends Command
         $data = array_slice($rows, 1);
         $cache = [];
 
-        try {
-            $this->loadCookies();
-        } catch (Throwable $e) {
-            $this->error($e->getMessage());
-        }
-
         foreach ($data as $i => $row) {
             if ($this->sessionBroken) {
                 $data[$i][$managerCol] = '';
@@ -133,9 +115,11 @@ class FillPlateOperatorsCommand extends Command
 
             if (! array_key_exists($plate, $cache)) {
                 try {
-                    $cache[$plate] = $this->topOperation($plate) ?? self::NOT_FOUND;
+                    usleep((int) $this->option('delay') * 1000);
+                    $cache[$plate] = self::pickTopOperation(self::cards($crm->orders($plate)), $plate) ?? self::NOT_FOUND;
                 } catch (Throwable $e) {
                     $this->error("{$plate}: " . $e->getMessage());
+                    $this->sessionBroken = $e instanceof EgsCrmAuthException;
 
                     if ($this->sessionBroken) {
                         $data[$i][$managerCol] = '';
@@ -174,7 +158,7 @@ class FillPlateOperatorsCommand extends Command
         $this->info("Tayyor: {$output} (" . count($data) . ' qator, ' . count($cache) . ' ta noyob raqam)');
 
         if ($this->sessionBroken) {
-            $this->error('CRM\'ga kirib bo\'lmadi — Manager ustuni to\'liq to\'ldirilmadi.');
+            $this->error('CRM API ishlamadi — Manager ustuni to\'liq to\'ldirilmadi.');
 
             return self::FAILURE;
         }
@@ -183,25 +167,19 @@ class FillPlateOperatorsCommand extends Command
     }
 
     /**
-     * Raqam bo'yicha barcha sahifalardagi zakazlarni yig'ib, eng ko'p
-     * qatnashgan OPERATION ismini qaytaradi (natija bo'lmasa null).
+     * API buyurtmalari -> pickTopOperation kartalari.
+     *
+     * @param  array<int,array<string,mixed>>  $orders
+     * @return array<int,array{order_id:?string,parent_id:?string,operation:?string,auto:?string}>
      */
-    private function topOperation(string $plate): ?string
+    public static function cards(array $orders): array
     {
-        $html = $this->fetchPage($plate, 1);
-
-        if (! preg_match('/Showing\s+\d+\s+to\s+\d+\s+of\s+([\d,]+)\s+results/', strip_tags($html), $m)) {
-            return null;
-        }
-
-        $pages = (int) ceil((int) str_replace(',', '', $m[1]) / self::PER_PAGE);
-        $cards = self::parseCards($html);
-
-        for ($page = 2; $page <= $pages; $page++) {
-            $cards = array_merge($cards, self::parseCards($this->fetchPage($plate, $page)));
-        }
-
-        return self::pickTopOperation($cards, $plate);
+        return array_map(fn (array $order) => [
+            'order_id' => isset($order['id']) ? (string) $order['id'] : null,
+            'parent_id' => isset($order['parent_order_id']) ? (string) $order['parent_order_id'] : null,
+            'operation' => trim((string) ($order['operation']['name'] ?? '')) ?: null,
+            'auto' => trim((string) ($order['vehicle']['auto_number'] ?? '')) ?: null,
+        ], $orders);
     }
 
     /**
@@ -212,7 +190,7 @@ class FillPlateOperatorsCommand extends Command
         $perRoot = [];
 
         foreach ($cards as $card) {
-            // filter[search] umumiy qidiruv — raqam haqiqatan "Номер авто"da borligini tekshiramiz
+            // search umumiy qidiruv — raqam haqiqatan avtomobil raqamida borligini tekshiramiz
             if (! $card['auto'] || ! str_contains(self::normalizePlate($card['auto']), $plate)) {
                 continue;
             }
@@ -233,48 +211,6 @@ class FillPlateOperatorsCommand extends Command
         arsort($counts);
 
         return (string) array_key_first($counts);
-    }
-
-    /**
-     * @return array<int,array{order_id:?string,parent_id:?string,operation:?string,auto:?string}>
-     */
-    public static function parseCards(string $html): array
-    {
-        $cards = [];
-
-        (new Crawler($html))
-            ->filter('div.w-full.overflow-hidden.rounded-lg.shadow-sm.border')
-            ->each(function (Crawler $card) use (&$cards) {
-                if (! str_contains($card->text(''), 'Номер авто')) {
-                    return;
-                }
-
-                $header = $card->children()->first();
-                preg_match_all('/#[A-Z]{3}\d{11}/', $header->count() ? $header->text('') : '', $ids);
-
-                // filtr panelida ham OPERATION so'zi bor — shuning uchun faqat karta ichidan qidiriladi
-                $cards[] = [
-                    'order_id' => $ids[0][0] ?? null,
-                    'parent_id' => $ids[0][1] ?? null,
-                    'operation' => self::field($card, 'OPERATION'),
-                    'auto' => self::field($card, 'Номер авто'),
-                ];
-            });
-
-        return $cards;
-    }
-
-    private static function field(Crawler $card, string $label): ?string
-    {
-        $value = $card->filterXPath(".//div[normalize-space(.)='{$label}']/following-sibling::*[1]");
-
-        if (! $value->count()) {
-            return null;
-        }
-
-        $text = trim(preg_replace('/\s+/u', ' ', $value->first()->text('')));
-
-        return $text !== '' ? $text : null;
     }
 
     private static function findColumn(array $headers, array $candidates): ?int
@@ -305,74 +241,5 @@ class FillPlateOperatorsCommand extends Command
     public static function normalizePlate(string $plate): string
     {
         return mb_strtoupper(preg_replace('/[^\p{L}\p{N}]/u', '', $plate));
-    }
-
-    private function fetchPage(string $plate, int $page): string
-    {
-        usleep((int) $this->option('delay') * 1000);
-
-        $response = Http::withOptions(['allow_redirects' => false])
-            ->withCookies($this->cookies, 'crm.zanjeer.uz')
-            ->withHeaders(['User-Agent' => 'Mozilla/5.0'])
-            ->timeout(30)
-            ->retry(3, 2000, throw: false)
-            ->get(self::ORDERS_URL, [
-                'filter' => ['showTrashed' => 0, 'search' => $plate],
-                'page' => $page,
-            ]);
-
-        // sessiya eskirgan bo'lsa Laravel /login'ga redirect qiladi
-        if ($response->redirect() && str_contains((string) $response->header('Location'), '/login')) {
-            $this->relogin('CRM sessiyasi eskirgan');
-
-            return $this->fetchPage($plate, $page);
-        }
-
-        if (! $response->successful()) {
-            throw new RuntimeException("CRM javobi HTTP {$response->status()}");
-        }
-
-        return $response->body();
-    }
-
-    private function loadCookies(): void
-    {
-        $token = CrmToken::where('name', 'zanjeer_crm')->first();
-
-        if (! $token || ! $token->session_cookie) {
-            $this->relogin('CRM tokenlari topilmadi');
-
-            return;
-        }
-
-        $this->cookies = array_filter([
-            'XSRF-TOKEN' => $token->xsrf_token,
-            $token->session_cookie_name => $token->session_cookie,
-        ]);
-    }
-
-    /**
-     * `--fresh`siz chaqiriladi: u allaqachon ishlab turgan chromedriver'ni
-     * chetlab o'tib yangisini ishga tushirishga majburlaydi, serverda esa
-     * CHROMEDRIVER_BINARY bo'sh — shuning uchun oddiy `crm:login` ishlatiladi.
-     */
-    private function relogin(string $reason): void
-    {
-        if ($this->reloggedIn) {
-            $this->sessionBroken = true;
-
-            throw new RuntimeException("{$reason}, qayta login qilingandan keyin ham. \"php artisan crm:login\" ni tekshiring.");
-        }
-
-        $this->reloggedIn = true;
-        $this->warn("{$reason}, crm:login ishga tushirilmoqda...");
-
-        if (Artisan::call('crm:login') !== self::SUCCESS) {
-            $this->sessionBroken = true;
-
-            throw new RuntimeException('crm:login muvaffaqiyatsiz: ' . trim(Artisan::output()));
-        }
-
-        $this->loadCookies();
     }
 }

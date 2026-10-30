@@ -230,7 +230,7 @@ class OperationsTest extends TestCase
         Queue::fake();
         $this->actingAs($this->superAdmin());
 
-        $this->postJson('/operations/crm-login/run', ['date' => 'nonsense'])->assertStatus(202);
+        $this->postJson('/operations/crm-check/run', ['date' => 'nonsense'])->assertStatus(202);
         $this->assertNull(JobRun::sole()->params);
     }
 

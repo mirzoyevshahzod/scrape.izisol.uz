@@ -17,8 +17,8 @@ return [
         'items' => [
             ['label' => 'Bosh sahifa', 'route' => 'home', 'icon' => 'fa-house', 'permission' => null],
             ['label' => 'Boshqaruv', 'route' => 'operations.index', 'icon' => 'fa-sliders', 'match' => 'operations.*',
-                'permission' => ['operation.crm-login', 'operation.pipeline', 'operation.telegram', 'operation.crm-import', 'operation.scraping'],
-                'description' => 'CRM login, pipeline, Telegram va scraping\'ni bir bosishda ishga tushirish.'],
+                'permission' => ['operation.crm-check', 'operation.pipeline', 'operation.telegram', 'operation.crm-import', 'operation.scraping'],
+                'description' => 'CRM API tekshiruvi, pipeline, Telegram va scraping\'ni bir bosishda ishga tushirish.'],
         ],
     ],
     [

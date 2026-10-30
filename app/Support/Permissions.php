@@ -37,7 +37,7 @@ final class Permissions
             'page.merge-excel' => 'Excel Fayllarni Birlashtirish',
         ],
         'Boshqaruv amallari' => [
-            'operation.crm-login' => 'CRM login',
+            'operation.crm-check' => 'CRM API tekshiruvi',
             'operation.pipeline' => 'Pipeline\'ni ishga tushirish',
             'operation.telegram' => 'Telegram\'ga yuborish',
             'operation.crm-import' => 'CRM\'ga kunlik import',

@@ -2,7 +2,7 @@
 
 namespace App\Console\Commands;
 
-use App\Support\Crm\CrmSession;
+use App\Services\EgsCrmClient;
 use App\Support\DailyFiles;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Artisan;
@@ -12,9 +12,9 @@ use ZipArchive;
 
 /**
  * Kunlik scrape natijalarini (Qoldau Kazakhstan-Russia, Turkey, Zitic,
- * Belarus declarant) tegishli format buyruqlari orqali tayyorlab, bitta
- * CRM login sessiyasida ketma-ket Zanjeer CRM'ning "Границы -> Торнадо"
- * (custom-operations) importiga yuklaydi.
+ * Belarus declarant) tegishli format buyruqlari orqali tayyorlab, EGS CRM
+ * API'si orqali "Границы -> Торнадо" (custom-operations) importiga yuklaydi
+ * (EgsCrmClient). Granitsa nomi API'dagi ro'yxatdan ID'ga aylantiriladi.
  *
  * Har bir bosqich mustaqil ravishda try/catch qilinadi — biri
  * muvaffaqiyatsiz bo'lsa ham, qolganlari davom etadi. Oxirida har bir
@@ -23,33 +23,19 @@ use ZipArchive;
 class CrmDailyImportCommand extends Command
 {
     protected $signature = 'crm:daily-import
-                            {--email= : .env dagi CRM_LOGIN_EMAIL o\'rniga ishlatiladi}
-                            {--password= : .env dagi CRM_LOGIN_PASSWORD o\'rniga ishlatiladi}
-                            {--timeout=60 : Har bir bosqich uchun kutish vaqti (soniya)}
                             {--only= : Faqat shu bosqich(lar)ni ishga tushirish, vergul bilan ajratib (masalan: zitic,kazakhstan-russia). Bo\'sh bo\'lsa hammasi ishga tushadi}
                             {--date= : Shu kun (YYYY-MM-DD) fayllarini import qilish. Bo\'sh bo\'lsa — eng oxirgi fayllar}';
 
-    protected $description = 'Qoldau/Turkey/Zitic/Declarant fayllarini formatlab, bitta CRM sessiyasida Zanjeer import qiladi';
+    protected $description = 'Qoldau/Turkey/Zitic/Declarant fayllarini formatlab, EGS CRM API orqali "Торнадо"ga import qiladi';
 
     private array $results = [];
 
     /** --date qiymati (null — eng oxirgi fayllar) */
     private ?string $date = null;
 
-    public function handle(): int
+    public function handle(EgsCrmClient $crm): int
     {
         set_time_limit(0);
-
-        $config = config('crm.zanjeer');
-
-        $email = $this->option('email') ?: $config['email'];
-        $password = $this->option('password') ?: $config['password'];
-
-        if (! $email || ! $password) {
-            $this->error('CRM_LOGIN_EMAIL va CRM_LOGIN_PASSWORD .env faylida (yoki --email= / --password= bilan) berilishi shart.');
-
-            return self::FAILURE;
-        }
 
         try {
             $this->date = DailyFiles::parseDateOption($this->option('date'));
@@ -63,9 +49,6 @@ class CrmDailyImportCommand extends Command
             $this->info("Sana: {$this->date}");
         }
 
-        $timeout = (int) $this->option('timeout');
-        $session = null;
-
         $allLabels = ['Kazakhstan - Russia', 'Turkey', 'Zitic', 'Declarant'];
         $wantedLabels = $this->resolveOnlyLabels($allLabels, $this->option('only'));
 
@@ -76,39 +59,31 @@ class CrmDailyImportCommand extends Command
         }
 
         try {
-            $this->info('chromedriver va brauzer tayyorlanmoqda...');
-            $session = CrmSession::start($config);
-
-            $this->info('Tizimga kirilmoqda...');
-            $session->login($config, $email, $password, $timeout);
+            $this->info('CRM API: granitsalar ro\'yxati olinmoqda...');
+            $this->info('Granitsalar: ' . count($crm->borders()) . ' ta');
         } catch (Throwable $e) {
-            $this->error('CRM ga kirib bo\'lmadi: ' . $e->getMessage());
-            $session?->quit();
+            $this->error('CRM API ishlamayapti: ' . $e->getMessage());
 
             return self::FAILURE;
         }
 
         $pipelines = array_intersect_key([
-            'Kazakhstan - Russia' => fn () => $this->importKazakhstanRussia($session, $config, $timeout),
-            'Turkey' => fn () => $this->importTurkey($session, $config, $timeout),
-            'Zitic' => fn () => $this->importZitic($session, $config, $timeout),
-            'Declarant' => fn () => $this->importDeclarant($session, $config, $timeout),
+            'Kazakhstan - Russia' => fn () => $this->importKazakhstanRussia($crm),
+            'Turkey' => fn () => $this->importTurkey($crm),
+            'Zitic' => fn () => $this->importZitic($crm),
+            'Declarant' => fn () => $this->importDeclarant($crm),
         ], array_flip($wantedLabels));
 
-        try {
-            foreach ($pipelines as $label => $pipeline) {
-                try {
-                    $pipeline();
-                } catch (Throwable $e) {
-                    // Kutilmagan xato (masalan konvert bosqichidagi bug) bitta
-                    // bosqichni to'xtatsin, lekin qolgan bosqichlar davom etsin.
-                    Log::error('CRM daily-import pipeline failed', ['pipeline' => $label, 'error' => $e->getMessage()]);
-                    $this->error("XATO ({$label}): " . $e->getMessage());
-                    $this->results[] = ['group' => $label, 'border' => '-', 'status' => 'error', 'message' => $e->getMessage()];
-                }
+        foreach ($pipelines as $label => $pipeline) {
+            try {
+                $pipeline();
+            } catch (Throwable $e) {
+                // Kutilmagan xato (masalan konvert bosqichidagi bug) bitta
+                // bosqichni to'xtatsin, lekin qolgan bosqichlar davom etsin.
+                Log::error('CRM daily-import pipeline failed', ['pipeline' => $label, 'error' => $e->getMessage()]);
+                $this->error("XATO ({$label}): " . $e->getMessage());
+                $this->results[] = ['group' => $label, 'border' => '-', 'status' => 'error', 'message' => $e->getMessage()];
             }
-        } finally {
-            $session->quit();
         }
 
         $this->printSummary();
@@ -151,7 +126,7 @@ class CrmDailyImportCommand extends Command
      * Qoldau "Kazakhstan - Russia" faylini granitsalar bo'yicha bo'lib
      * (excel:split), har bir granitsani alohida import qiladi.
      */
-    private function importKazakhstanRussia(CrmSession $session, array $config, int $timeout): void
+    private function importKazakhstanRussia(EgsCrmClient $crm): void
     {
         $this->line('=== Kazakhstan - Russia (excel:split) ===');
 
@@ -200,7 +175,7 @@ class CrmDailyImportCommand extends Command
         foreach ($files as $file) {
             $border = preg_replace('/_\d{4}-\d{2}-\d{2}$/', '', pathinfo($file, PATHINFO_FILENAME));
 
-            $this->importOne('Kazakhstan - Russia', $border, $file, $session, $config, $timeout);
+            $this->importOne('Kazakhstan - Russia', $border, $file, $crm);
         }
 
         $this->deleteDirectory($extractDir);
@@ -210,7 +185,7 @@ class CrmDailyImportCommand extends Command
      * Turkey scrape faylini import formatiga o'tkazib (excel:border-convert),
      * "Хопа-Сарпи" granitsasiga yuklaydi.
      */
-    private function importTurkey(CrmSession $session, array $config, int $timeout): void
+    private function importTurkey(EgsCrmClient $crm): void
     {
         $this->line('=== Turkey (excel:border-convert) ===');
 
@@ -228,7 +203,7 @@ class CrmDailyImportCommand extends Command
         Artisan::call('excel:border-convert', ['input' => $sourceFile, 'output' => $converted]);
         $this->line(Artisan::output());
 
-        $this->importOne('Turkey', 'Хопа-Сарпи', $converted, $session, $config, $timeout);
+        $this->importOne('Turkey', 'Хопа-Сарпи', $converted, $crm);
 
         @unlink($converted);
     }
@@ -237,7 +212,7 @@ class CrmDailyImportCommand extends Command
      * Zitic scrape faylini import formatiga o'tkazib (zitic:convert),
      * "Владикавказ — Казбеги" granitsasiga yuklaydi.
      */
-    private function importZitic(CrmSession $session, array $config, int $timeout): void
+    private function importZitic(EgsCrmClient $crm): void
     {
         $this->line('=== Zitic (zitic:convert) ===');
 
@@ -255,7 +230,7 @@ class CrmDailyImportCommand extends Command
         Artisan::call('zitic:convert', ['input' => $sourceFile, 'output' => $converted]);
         $this->line(Artisan::output());
 
-        $this->importOne('Zitic', 'Владикавказ — Казбеги', $converted, $session, $config, $timeout);
+        $this->importOne('Zitic', 'Владикавказ — Казбеги', $converted, $crm);
 
         @unlink($converted);
     }
@@ -265,7 +240,7 @@ class CrmDailyImportCommand extends Command
      * formatiga o'tkazib (declarant:convert), tegishli granitsalarga
      * yuklaydi.
      */
-    private function importDeclarant(CrmSession $session, array $config, int $timeout): void
+    private function importDeclarant(EgsCrmClient $crm): void
     {
         $this->line('=== Declarant (declarant:convert) ===');
 
@@ -290,7 +265,7 @@ class CrmDailyImportCommand extends Command
                 Artisan::call('declarant:convert', ['input' => $sourceFile, 'output' => $converted]);
                 $this->line(Artisan::output());
 
-                $this->importOne('Declarant', $border, $converted, $session, $config, $timeout);
+                $this->importOne('Declarant', $border, $converted, $crm);
 
                 @unlink($converted);
             } catch (Throwable $e) {
@@ -303,7 +278,7 @@ class CrmDailyImportCommand extends Command
         }
     }
 
-    private function importOne(string $group, string $border, string $file, CrmSession $session, array $config, int $timeout): void
+    private function importOne(string $group, string $border, string $file, EgsCrmClient $crm): void
     {
         if (! file_exists($file)) {
             $this->error("Fayl topilmadi: {$file}");
@@ -313,12 +288,19 @@ class CrmDailyImportCommand extends Command
         }
 
         try {
-            $this->info("Import qilinmoqda: {$border} <= {$file}");
+            $borderId = $crm->borderId($border);
 
-            $session->importFile($config, $border, $file, $timeout);
+            if ($borderId === null) {
+                throw new \RuntimeException("'{$border}' granitsasi CRM'da topilmadi. Mavjudlari: "
+                    . implode(', ', array_column($crm->borders(), 'name')));
+            }
 
-            $this->info("OK: {$border}");
-            $this->results[] = ['group' => $group, 'border' => $border, 'status' => 'ok', 'message' => 'Muvaffaqiyatli'];
+            $this->info("Import qilinmoqda: {$border} (ID {$borderId}) <= {$file}");
+
+            $rows = $crm->importOperations($borderId, $file);
+
+            $this->info("OK: {$border} — {$rows} ta qator");
+            $this->results[] = ['group' => $group, 'border' => $border, 'status' => 'ok', 'message' => "{$rows} ta qator yuklandi"];
         } catch (Throwable $e) {
             Log::error('CRM import failed', ['border' => $border, 'file' => $file, 'error' => $e->getMessage()]);
             $this->error("XATO ({$border}): " . $e->getMessage());

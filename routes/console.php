@@ -13,23 +13,13 @@ Artisan::command('inspire', function () {
 |--------------------------------------------------------------------
 | Kunlik pipeline — har bir bosqich orasida 1 soat
 |--------------------------------------------------------------------
-| 05:00 — Zanjeer CRM'ga login (token yangilanadi)
 | 06:00 — barcha scrape buyruqlari (Qoldau, declarant, zitic, turkey)
 | 07:00 — Qoldau warehouse import/export/merge pipeline
-| 08:00 — Zanjeer CRM'ga import (custom-operations)
+| 08:00 — EGS CRM'ga import (custom-operations, API orqali)
 | 08:45 — kunlik fayllarni Telegram'ga yuborish
 | 09:00 — kunlik pipeline holati haqida Telegram'ga hisobot
 */
 
-Schedule::command('crm:login')
-    ->dailyAt('05:00')
-    ->withoutOverlapping()
-    ->onFailure(fn () => PipelineStatus::recordFailure(
-        'crm:login (05:00)',
-        "Muvaffaqiyatsiz tugadi, batafsil: storage/logs/laravel-" . now()->format('Y-m-d') . '.log'
-    ));
-
-// "Barcha scraping" tugmasi bilan umumiy ro'yxat (config/operations.php)
 $qoldauCheckpoints = config('operations.qoldau_checkpoints');
 
 foreach ($qoldauCheckpoints as $checkpoint) {
@@ -93,13 +83,3 @@ Schedule::command('telegram:send-daily-files')
 Schedule::command('telegram:daily-status')
     ->dailyAt('09:00')
     ->withoutOverlapping();
-
-/*
-|--------------------------------------------------------------------
-| Zanjeer CRM sessiyasini kun davomida yangilab turish
-|--------------------------------------------------------------------
-| scrape:zanjeer-operators har doim yangi token topishi uchun.
-*/
-//Schedule::command('crm:login')
-//    ->hourly()
-//    ->withoutOverlapping();

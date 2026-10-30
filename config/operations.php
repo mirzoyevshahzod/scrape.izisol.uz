@@ -34,13 +34,13 @@ return [
     'declarant_zones' => $declarantZones,
 
     'operations' => [
-        'crm-login' => [
-            'label' => 'CRM login',
-            'description' => 'Zanjeer CRM\'ga kirib, sessiya tokenlarini yangilaydi.',
-            'icon' => 'fa-key',
-            'permission' => 'operation.crm-login',
+        'crm-check' => [
+            'label' => 'CRM API tekshiruvi',
+            'description' => 'EGS CRM API kaliti va ulanishni tekshiradi, import granitsalari ro\'yxatini chiqaradi.',
+            'icon' => 'fa-plug',
+            'permission' => 'operation.crm-check',
             'commands' => [
-                ['crm:login', []],
+                ['crm:ping', []],
             ],
         ],
 
