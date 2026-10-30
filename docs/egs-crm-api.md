@@ -8,7 +8,7 @@ Selenium / headless Chrome endi ishlatilmaydi.
 `.env`:
 
 ```
-EGS_CRM_API_URL=https://crm.egsgroupapp.uz/api/v1/integration
+EGS_CRM_API_URL=https://crm.zanjeer.uz/api/v1/integration
 EGS_CRM_API_KEY=<kalit>
 ```
 

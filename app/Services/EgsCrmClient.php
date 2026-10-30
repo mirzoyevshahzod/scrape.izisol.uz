@@ -12,7 +12,7 @@ use RuntimeException;
 use Throwable;
 
 /**
- * EGS CRM integratsiya API'si (crm.egsgroupapp.uz/api/v1/integration).
+ * EGS CRM integratsiya API'si (crm.zanjeer.uz/api/v1/integration).
  *
  * Avval CRM bilan Selenium (headless Chrome) orqali ishlanardi; endi
  * hammasi shu API orqali: granitsalar, "Торнадо" importi, buyurtmalar
