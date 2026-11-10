@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Console\Commands\ScrapeZanjeerOperators;
 use App\Services\EgsCrmAuthException;
 use App\Services\EgsCrmClient;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Sleep;
@@ -16,6 +17,8 @@ use Tests\TestCase;
 
 class EgsCrmTest extends TestCase
 {
+    use RefreshDatabase;
+
     private const API = 'https://crm.test/api/v1/integration';
 
     private string $dir;
@@ -221,36 +224,84 @@ class EgsCrmTest extends TestCase
         $this->assertSame('-', ScrapeZanjeerOperators::pickOperator([], 'X'));
     }
 
-    public function test_zanjeer_operators_writes_column_h_and_last_file(): void
+    public function test_company_manager_and_inn_come_from_orders(): void
     {
-        Http::fake([self::API . '/contragents*' => fn (Request $r) => Http::response(self::page($r['search'] === 'BAXT TRANSPORT'
-            ? [['company_name' => 'BAXT TRANSPORT', 'employee' => ['name' => 'KARIMOV ANVAR']]]
-            : []))]);
+        $order = fn (int $id, int $parent, ?array $carrier, ?array $customer, string $operation) => ['id' => $id, 'parent_order_id' => $parent,
+            'carrier' => $carrier, 'customer' => $customer, 'operation' => ['name' => $operation], 'vehicle' => null];
+        $baxt = ['id' => 'C-1', 'name' => 'ООО "BAXT TRANSPORT"', 'tin' => '308413072'];
+        $other = ['id' => 'C-2', 'name' => 'BAXT TRANSPORT SERVIS', 'tin' => '300000001'];
+
+        $found = ScrapeZanjeerOperators::fromOrders([
+            $order(1, 100, $baxt, null, 'ALI'), $order(2, 100, $baxt, null, 'ALI'), // bitta asosiy buyurtma
+            $order(3, 101, null, $baxt, 'VALI'), $order(4, 102, $baxt, null, 'VALI'),  // mijoz sifatida ham sanaladi
+            $order(5, 103, $other, null, 'ALI'), $order(6, 104, $other, null, 'ALI'), // boshqa kompaniya — hisobga olinmaydi
+        ], 'OOO "BAXT TRANSPORT"');
+
+        $this->assertSame(['operator' => 'VALI', 'tin' => '308413072'], $found);
+        $this->assertSame(['operator' => '-', 'tin' => null], ScrapeZanjeerOperators::fromOrders([], 'X'));
+        $this->assertSame('-', ScrapeZanjeerOperators::fromOrders([$order(1, 1, $baxt, null, 'EGS OPERATION')], 'BAXT TRANSPORT')['operator']);
+    }
+
+    public function test_zanjeer_operators_writes_manager_and_inn_and_falls_back_to_contragent(): void
+    {
+        Http::fake([
+            self::API . '/orders*' => fn (Request $r) => Http::response(self::page($r['search'] === 'BAXT TRANSPORT'
+                ? [['id' => 1, 'parent_order_id' => 100, 'carrier' => ['name' => 'BAXT TRANSPORT', 'tin' => '308413072'], 'customer' => null, 'operation' => ['name' => 'VALIYEV VALI']]]
+                : [])),
+            self::API . '/contragents*' => fn (Request $r) => Http::response(self::page($r['search'] === 'YANGI'
+                ? [['company_name' => 'YANGI', 'tin' => '311111111', 'employee' => ['name' => 'KARIMOV ANVAR']]]
+                : [])),
+        ]);
 
         $relative = 'tmp/egs-test-' . uniqid() . '.xlsx';
         $input = storage_path("app/{$relative}");
         @mkdir(dirname($input), 0775, true);
         $book = new Spreadsheet();
-        $book->getActiveSheet()->fromArray([['A', 'B', 'C', 'D', 'Company'], ['', '', '', '', 'OOO "BAXT TRANSPORT"'], ['', '', '', '', 'OOO "BAXT TRANSPORT"'], ['', '', '', '', 'OOO "YO\'Q"']]);
+        $book->getActiveSheet()->fromArray([['A', 'B', 'C', 'INN', 'Firma nomi'], ['', '', '', '', 'OOO "BAXT TRANSPORT"'], ['', '', '', '', 'OOO "BAXT TRANSPORT"'],
+            ['', '', '', '999999999', 'OOO "YANGI"'], ['', '', '', '', 'OOO "YO\'Q"']]);
         (new Xlsx($book))->save($input);
 
         $lastFile = storage_path('app/last_operator_file.txt');
         $previous = is_file($lastFile) ? file_get_contents($lastFile) : null;
 
         try {
-            $this->artisan('scrape:zanjeer-operators', ['file' => $relative])->assertSuccessful();
+            $this->artisan('scrape:zanjeer-operators', ['file' => $relative])
+                ->expectsOutputToContain('Kompaniyalar: 3 ta · menejer topildi: 2 · INN (CRM\'dan): 2')
+                ->assertSuccessful();
 
             $output = trim(file_get_contents($lastFile));
             $rows = IOFactory::load($output)->getActiveSheet()->toArray(null, false, false, true);
             $this->assertSame('Meneger Ismi sharifi', $rows[1]['H']);
-            $this->assertSame('KARIMOV ANVAR', $rows[2]['H']);
-            $this->assertSame('KARIMOV ANVAR', $rows[3]['H']);
-            $this->assertSame('-', $rows[4]['H']);
-            Http::assertSentCount(2); // bir xil kompaniya bir marta so'raladi
+            $this->assertSame(['VALIYEV VALI', '308413072'], [$rows[2]['H'], $rows[2]['D']]);
+            $this->assertSame(['VALIYEV VALI', '308413072'], [$rows[3]['H'], $rows[3]['D']]);
+            $this->assertSame(['KARIMOV ANVAR', 999999999], [$rows[4]['H'], $rows[4]['D']]); // bor INN ustidan yozilmaydi
+            $this->assertSame(['-', null], [$rows[5]['H'], $rows[5]['D']]);
+            // BAXT: faqat buyurtmalar; YANGI va YO'Q: buyurtma + kontragent; takror kompaniya so'ralmaydi
+            Http::assertSentCount(5);
             @unlink($output);
         } finally {
             @unlink($input);
             $previous === null ? @unlink($lastFile) : file_put_contents($lastFile, $previous);
         }
+    }
+
+    public function test_fill_inn_queries_only_missing_companies_once(): void
+    {
+        Http::fake(['orginfo.uz/*' => Http::response(OrginfoClientTest::page([['308413072', '"BAXT TRANSPORT" mas`uliyati cheklangan jamiyati']]))]);
+
+        $input = $this->excel([['A', 'B', 'C', 'INN', 'Firma nomi', 'F', 'Telefon'], ['', '', '', '', 'OOO "BAXT TRANSPORT"', '', 998901234567],
+            ['', '', '', '', 'OOO "BAXT TRANSPORT"', '', ''], ['', '', '', '300000001', 'OOO "BOR"', '', '']]);
+        $output = "{$this->dir}/final.xlsx";
+
+        $this->artisan('excel:fill-inn', ['file' => $input, 'output' => $output])
+            ->expectsOutputToContain("INN'siz kompaniyalar: 1 ta (2 qator)")
+            ->expectsOutputToContain('INN topildi: 1')
+            ->assertSuccessful();
+
+        Http::assertSentCount(1);
+        $rows = IOFactory::load($output)->getActiveSheet()->toArray(null, false, false, true);
+        $this->assertSame(['308413072', '308413072', 300000001], [$rows[2]['D'], $rows[3]['D'], $rows[4]['D']]);
+        $this->assertSame('998901234567', $rows[2]['G']);
+        $this->assertSame('Chegara nomi', $rows[1]['A']);
     }
 }

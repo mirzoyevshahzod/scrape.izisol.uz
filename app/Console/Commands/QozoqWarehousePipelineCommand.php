@@ -172,7 +172,7 @@ class QozoqWarehousePipelineCommand extends Command
                 throw new \RuntimeException("Operator fayli topilmadi: {$operatorsFile}");
             }
 
-            $this->info('INN qo\'shilmoqda (excel:fill-inn, orginfo.uz)...');
+            $this->info('CRM\'da topilmagan INN\'lar qo\'shilmoqda (excel:fill-inn, orginfo.uz)...');
 
             $orginfoDir = storage_path('app/orginfo');
 

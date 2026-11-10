@@ -81,13 +81,13 @@ class EgsCrmClient
     }
 
     /**
-     * Qidiruvga mos barcha sub-buyurtmalar (hamma sahifalar).
+     * Qidiruvga mos sub-buyurtmalar (hamma sahifalar yoki birinchi $maxPages tasi).
      *
      * @return array<int,array<string,mixed>>
      */
-    public function orders(string $search): array
+    public function orders(string $search, ?int $maxPages = null): array
     {
-        return $this->all('orders', ['search' => $search]);
+        return $this->all('orders', ['search' => $search], $maxPages);
     }
 
     /**
@@ -127,7 +127,7 @@ class EgsCrmClient
      *
      * @return array<int,array<string,mixed>>
      */
-    public function all(string $path, array $query = []): array
+    public function all(string $path, array $query = [], ?int $maxPages = null): array
     {
         $items = [];
         $page = 1;
@@ -136,7 +136,7 @@ class EgsCrmClient
             $data = $this->get($path, ['per_page' => self::PER_PAGE, 'page' => $page] + $query);
             array_push($items, ...($data['data'] ?? []));
             $page++;
-        } while ($page <= (int) ($data['last_page'] ?? 1));
+        } while ($page <= (int) ($data['last_page'] ?? 1) && ($maxPages === null || $page <= $maxPages));
 
         return $items;
     }

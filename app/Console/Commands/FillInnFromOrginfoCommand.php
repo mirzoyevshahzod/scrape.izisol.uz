@@ -2,175 +2,127 @@
 
 namespace App\Console\Commands;
 
+use App\Models\OrginfoInn;
+use App\Services\OrginfoClient;
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\Http;
-use PhpOffice\PhpSpreadsheet\IOFactory;
-use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
-use Symfony\Component\DomCrawler\Crawler;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Sleep;
 use PhpOffice\PhpSpreadsheet\Cell\DataType;
+use PhpOffice\PhpSpreadsheet\IOFactory;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 
+/**
+ * Pipeline'ning yakuniy fayli: sarlavhalar, telefon (G) matn ko'rinishida va
+ * INN'i (D) bo'sh qolgan kompaniyalar (E) uchun orginfo.uz'dan INN.
+ *
+ * INN'ning ko'pi oldingi bosqichda (scrape:zanjeer-operators) CRM'dan
+ * yoziladi — bu yerda faqat qolganlari. Har bir noyob nom bir marta, 4 tadan
+ * parallel so'raladi; natijalar orginfo_inns jadvalida keshlanadi (Mintrans
+ * 3-bosqichi bilan umumiy). Faqat nomi aynan mos, faol tashkilot INN'i olinadi.
+ */
 class FillInnFromOrginfoCommand extends Command
 {
     protected $signature = 'excel:fill-inn
                             {file : Excel file path}
                             {output=output.xlsx : Output file name}';
 
-    protected $description = 'Fill INN column from orginfo.uz by company name';
+    protected $description = 'Bo\'sh INN (D) ustunini kompaniya nomi (E) bo\'yicha orginfo.uz\'dan to\'ldiradi';
 
-    public function handle()
+    /** orginfo.uz'ga bir vaqtda yuboriladigan so'rovlar soni */
+    private const CONCURRENCY = 4;
+
+    public function handle(OrginfoClient $client): int
     {
-        $filePath = $this->argument('file');
-        $outputPath = $this->argument('output');
-
-        $spreadsheet = IOFactory::load($filePath);
+        $spreadsheet = IOFactory::load($this->argument('file'));
         $sheet = $spreadsheet->getActiveSheet();
-
         $highestRow = $sheet->getHighestRow();
+
         for ($r = 2; $r <= $highestRow; $r++) {
-
-            $phone = $sheet
-                ->getCell("G{$r}")
-                ->getFormattedValue();
-
-            $sheet->setCellValueExplicit(
-                "G{$r}",
-                (string) $phone,
-                DataType::TYPE_STRING
-            );
+            $sheet->setCellValueExplicit("G{$r}", (string) $sheet->getCell("G{$r}")->getFormattedValue(), DataType::TYPE_STRING);
         }
 
-        // Header
-        $sheet->setCellValue('A1', 'Chegara nomi');
-        $sheet->setCellValue('B1', 'Davlatlar');
-        $sheet->setCellValue('C1', 'Sana');
-        $sheet->setCellValue('D1', 'INN');
-        $sheet->setCellValue('E1', 'Firma nomi');
-        $sheet->setCellValue('F1', 'Mashina raqami');
+        foreach (['A1' => 'Chegara nomi', 'B1' => 'Davlatlar', 'C1' => 'Sana', 'D1' => 'INN', 'E1' => 'Firma nomi', 'F1' => 'Mashina raqami'] as $cell => $title) {
+            $sheet->setCellValue($cell, $title);
+        }
 
+        // INN'i bo'sh qatorlar: nom => qatorlar
+        $rowsByName = [];
         for ($row = 2; $row <= $highestRow; $row++) {
+            $company = trim((string) $sheet->getCell("E{$row}")->getValue());
 
-            // E ustun = Firma nomi
-            $originalCompanyName = trim(
-                (string) $sheet->getCell("E{$row}")->getValue()
-            );
-
-            if (empty($originalCompanyName)) {
-                continue;
-            }
-
-            // Kompaniya nomini tozalash
-            $companyName = $this->cleanCompanyName($originalCompanyName);
-
-            if (empty($companyName)) {
-                continue;
-            }
-
-            $this->info("Searching: {$companyName}");
-
-            try {
-
-                $url = 'https://orginfo.uz/ru/search/all/?q=' . urlencode($companyName);
-
-                $response = Http::timeout(30)
-                    ->withHeaders([
-                        'User-Agent' => 'Mozilla/5.0'
-                    ])
-                    ->get($url);
-
-                if (!$response->successful()) {
-
-                    $this->error("REQUEST FAILED: {$companyName}");
-                    continue;
-                }
-
-                $html = $response->body();
-
-                $crawler = new Crawler($html);
-
-                $inn = '';
-
-                // Birinchi topilgan INN
-                if (
-                    $crawler->filter('.bg-success.bg-opacity-25.text-success')->count()
-                ) {
-
-                    $inn = trim(
-                        $crawler
-                            ->filter('.bg-success.bg-opacity-25.text-success')
-                            ->first()
-                            ->text('')
-                    );
-                }
-
-                if (!empty($inn)) {
-
-                    // D ustun = INN
-                    $sheet->setCellValue("D{$row}", $inn);
-
-                    $this->info("FOUND: {$companyName} => {$inn}");
-
-                } else {
-
-                    $this->warn("NOT FOUND: {$companyName}");
-                }
-
-                sleep(1);
-
-            } catch (\Throwable $e) {
-
-                $this->error("ERROR: {$companyName}");
-                $this->error($e->getMessage());
+            if ($company !== '' && trim((string) $sheet->getCell("D{$row}")->getValue()) === '') {
+                $rowsByName[$company][] = $row;
             }
         }
 
- 
-        // Header style
+        $names = array_keys($rowsByName);
+        $stats = ['found' => 0, 'not_found' => 0, 'errors' => 0, 'cached' => 0];
+        $this->info('INN\'siz kompaniyalar: ' . count($names) . ' ta (' . array_sum(array_map('count', $rowsByName)) . ' qator)');
+
+        foreach (array_chunk($names, self::CONCURRENCY) as $batch) {
+            $results = [];
+            $pending = [];
+
+            foreach ($batch as $name) {
+                $cached = OrginfoInn::cachedFor($name);
+
+                if ($cached) {
+                    $results[$name] = ['inn' => $cached->inn, 'cached' => true];
+                } else {
+                    $pending[] = $name;
+                }
+            }
+
+            if ($pending) {
+                foreach ($client->findInnMany($pending) as $name => $result) {
+                    if (! array_key_exists('error', $result)) {
+                        OrginfoInn::updateOrCreate(['name' => $name], ['inn' => $result['inn'], 'checked_at' => now()]);
+                    }
+
+                    $results[$name] = $result + ['cached' => false];
+                }
+            }
+
+            foreach ($batch as $name) {
+                $result = $results[$name];
+                $fromCache = $result['cached'] ? ' (bazadan)' : '';
+
+                if (array_key_exists('error', $result)) {
+                    Log::error('Orginfo INN error', ['name' => $name, 'error' => $result['error']]);
+                    $stats['errors']++;
+                    $this->error("ERROR: {$name}");
+                } elseif ($result['inn']) {
+                    foreach ($rowsByName[$name] as $row) {
+                        $sheet->setCellValueExplicit("D{$row}", $result['inn'], DataType::TYPE_STRING);
+                    }
+
+                    $stats['found']++;
+                    $this->info("FOUND: {$name} => {$result['inn']}{$fromCache}");
+                } else {
+                    $stats['not_found']++;
+                    $this->warn("NOT FOUND: {$name}{$fromCache}");
+                }
+
+                $stats['cached'] += $result['cached'] ? 1 : 0;
+            }
+
+            if ($pending && $name !== end($names)) {
+                Sleep::usleep(1_000_000);
+            }
+        }
+
         $sheet->getStyle('A1:H1')->applyFromArray([
-            'font' => [
-                'bold' => true,
-            ],
-            'alignment' => [
-                'horizontal' => Alignment::HORIZONTAL_CENTER,
-                'vertical' => Alignment::VERTICAL_CENTER,
-            ],
+            'font' => ['bold' => true],
+            'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
         ]);
 
+        (new Xlsx($spreadsheet))->save($this->argument('output'));
 
-        $writer = new Xlsx($spreadsheet);
-        $writer->save($outputPath);
+        $this->info("INN topildi: {$stats['found']} · topilmadi: {$stats['not_found']} · xato: {$stats['errors']}"
+            . ($stats['cached'] ? " · bazadan: {$stats['cached']}" : ''));
+        $this->info("DONE => {$this->argument('output')}");
 
-        $this->info("DONE => {$outputPath}");
-    }
-
-    private function cleanCompanyName(string $companyName): string
-    {
-        $companyName = trim($companyName);
-
-        // Qo‘shtirnoqlarni olib tashlash
-        $companyName = str_replace([
-            '"',
-            "'",
-            '«',
-            '»',
-            '`',
-        ], '', $companyName);
-
-        // OOO / ООО / MCHJ va boshqalarni olib tashlash
-        $patterns = [
-            '/^OOO\s+/iu',
-            '/^ООО\s+/iu',
-            '/^MCHJ\s+/iu',
-            '/^ЧП\s+/iu',
-            '/^СП\s+/iu',
-            '/^LLC\s+/iu',
-        ];
-
-        $companyName = preg_replace($patterns, '', $companyName);
-
-        // Ortiqcha probellarni tozalash
-        $companyName = preg_replace('/\s+/', ' ', $companyName);
-
-        return trim($companyName);
+        return self::SUCCESS;
     }
 }
