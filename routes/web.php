@@ -7,6 +7,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\MintransController;
 use App\Http\Controllers\OperationController;
+use App\Http\Controllers\SpotEventController;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\ScrapeController;
 use App\Http\Controllers\TurkeyScraperController;
@@ -39,6 +40,13 @@ Route::middleware('auth')->group(function () {
         Route::get('/missing/export', [MintransController::class, 'exportMissing'])->name('missing.export');
         Route::post('/missing/recheck', [MintransController::class, 'recheckMissing'])->name('missing.recheck');
     });
+    // spot.uz tadbirlari: ro'yxat va "Qidirish" (spot:events'ni hozir ishga tushirish)
+    Route::prefix('spot-events')->name('spot-events.')->middleware('permission:page.spot-events')->group(function () {
+        Route::get('/', [SpotEventController::class, 'index'])->name('index');
+        Route::post('/run', [SpotEventController::class, 'run'])->name('run');
+        Route::get('/status', [SpotEventController::class, 'status'])->name('status');
+    });
+
     //Belarus scraping
     Route::get('/belarus', [HomeController::class, 'belarus'])->name('scrape.data')->middleware('permission:page.belarus');
     //Qozoq scraping

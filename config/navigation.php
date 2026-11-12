@@ -42,6 +42,8 @@ return [
                 'description' => 'Bazadagi avtomobillar ro\'yxati.'],
             ['label' => 'Mintrans Avtoraqam', 'route' => 'mintrans.index', 'match' => 'mintrans.*', 'icon' => 'fa-id-card', 'permission' => 'page.mintrans-auto',
                 'description' => 'Excel\'dagi avtoraqamlar bo\'yicha Mintrans litsenziya ma\'lumotlari.'],
+            ['label' => 'Spot.uz tadbirlari', 'route' => 'spot-events.index', 'match' => 'spot-events.*', 'icon' => 'fa-calendar-days', 'permission' => 'page.spot-events',
+                'description' => 'spot.uz\'dagi B2B, forum va boshqa kerakli tadbirlar, Telegram\'ga yuborilganlari.'],
         ],
     ],
     [

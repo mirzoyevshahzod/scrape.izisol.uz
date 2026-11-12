@@ -21,6 +21,7 @@ final class Permissions
         'Sahifalar' => [
             'page.autos' => 'Autos',
             'page.mintrans-auto' => 'Mintrans Avtoraqam',
+            'page.spot-events' => 'Spot.uz tadbirlari',
             'page.qozoq' => 'Qozoq Scraper',
             'page.check-qozoq' => 'Qozoq Tekshirilgan',
             'page.belarus' => 'Belarus Litva',

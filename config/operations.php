@@ -134,6 +134,19 @@ return [
             ],
         ],
 
+        // Spot.uz tadbirlari sahifasidagi "Qidirish" tugmasi — Boshqaruv'da ko'rinmaydi
+        'spot-events' => [
+            'label' => 'Spot.uz tadbirlari',
+            'description' => 'spot.uz/ru/events\'dan kalit so\'zlarga mos yangi tadbirlarni topib, Telegram\'ga yuborish.',
+            'icon' => 'fa-calendar-days',
+            'permission' => 'page.spot-events',
+            'hidden' => true,
+            'timeout' => 900,
+            'commands' => [
+                ['spot:events', []],
+            ],
+        ],
+
         'scraping' => [
             'label' => 'Barcha scraping',
             'description' => 'Qoldau (4 ta), Declarant (3 ta), Zitic va Turkiya scraping\'ini ketma-ket ishga tushiradi.',
