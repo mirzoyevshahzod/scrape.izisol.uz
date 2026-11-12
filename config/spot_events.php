@@ -11,12 +11,17 @@
 | Kalit so'zlar vergul bilan ajratiladi, katta-kichik harf, defis va
 | bo'shliq farqi hisobga olinmaydi ("бизнес-завтрак" = "Бизнес завтрак"),
 | so'z qismi ham mos keladi ("форум" → "бизнес-форум", "форума").
+| SPOT_EVENTS_CHAT_ID'ga bir nechta chat vergul bilan yozilishi mumkin:
+| SPOT_EVENTS_CHAT_ID=111111,222222 — xabar har biriga yuboriladi.
 | .env'da o'zgartirgandan keyin: php artisan config:clear
 */
 
 return [
     'bot_token' => env('SPOT_EVENTS_BOT_TOKEN'),
-    'chat_id' => env('SPOT_EVENTS_CHAT_ID'),
+    'chat_ids' => array_values(array_filter(array_map(
+        'trim',
+        explode(',', (string) env('SPOT_EVENTS_CHAT_ID', ''))
+    ))),
     'keywords' => array_values(array_filter(array_map(
         'trim',
         explode(',', (string) env('SPOT_EVENTS_KEYWORDS', 'B2B,форум,бизнес-завтрак'))

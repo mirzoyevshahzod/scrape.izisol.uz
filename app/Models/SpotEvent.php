@@ -12,6 +12,7 @@ class SpotEvent extends Model
     protected $fillable = [
         'url', 'title', 'category', 'city', 'price', 'date_text', 'starts_on', 'ends_on',
         'start_time', 'description', 'registration_url', 'matched_keyword', 'notified_at', 'reminded_at',
+        'notified_chats', 'reminded_chats',
     ];
 
     protected function casts(): array
@@ -21,6 +22,8 @@ class SpotEvent extends Model
             'ends_on' => 'date',
             'notified_at' => 'datetime',
             'reminded_at' => 'datetime',
+            'notified_chats' => 'array',
+            'reminded_chats' => 'array',
         ];
     }
 }

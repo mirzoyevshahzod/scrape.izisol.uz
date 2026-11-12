@@ -23,7 +23,7 @@ class SpotEventsTest extends TestCase
         Carbon::setTestNow('2026-11-12 10:00:00');
         config([
             'spot_events.bot_token' => 'TEST',
-            'spot_events.chat_id' => '123',
+            'spot_events.chat_ids' => ['123'],
             'spot_events.keywords' => ['B2B', 'форум', 'бизнес-завтрак'],
         ]);
     }
@@ -216,6 +216,32 @@ class SpotEventsTest extends TestCase
         $this->telegramUp = true;
         $this->artisan('spot:events')->assertSuccessful();
         $this->assertSame(1, SpotEvent::whereNotNull('notified_at')->count());
+    }
+
+    public function test_sends_to_every_chat_and_retries_only_the_failed_one(): void
+    {
+        config(['spot_events.chat_ids' => ['123', '456']]);
+        $this->listHtml = self::listPage([$this->cards()[1]]);
+        $failChat = '456';
+        Http::fake([
+            'www.spot.uz/ru/events/' => fn () => Http::response($this->listHtml),
+            'www.spot.uz/*' => Http::response(self::detailPage([])),
+            'api.telegram.org/*' => function (Request $r) use (&$failChat) {
+                return $r['chat_id'] === $failChat ? Http::response(['ok' => false], 500) : Http::response(['ok' => true]);
+            },
+        ]);
+
+        $this->artisan('spot:events')->assertFailed();
+        $event = SpotEvent::first();
+        $this->assertNull($event->notified_at);
+        $this->assertSame(['123'], $event->notified_chats);
+        $this->sentMessages();
+
+        $failChat = null;
+        $this->artisan('spot:events')->assertSuccessful();
+
+        $this->assertSame(['456'], array_column($this->sentMessages(), 'chat_id'));
+        $this->assertNotNull(SpotEvent::first()->notified_at);
     }
 
     public function test_alerts_once_a_day_when_page_has_no_events(): void

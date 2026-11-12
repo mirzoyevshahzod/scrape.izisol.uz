@@ -32,15 +32,16 @@ class SpotEventsCommand extends Command
 
     private TelegramSender $telegram;
 
-    private string $chatId;
+    /** @var list<string> */
+    private array $chatIds;
 
     public function handle(SpotEventsClient $client): int
     {
         $dryRun = (bool) $this->option('dry-run');
-        $this->chatId = (string) config('spot_events.chat_id');
+        $this->chatIds = config('spot_events.chat_ids');
         $token = (string) config('spot_events.bot_token');
 
-        if (! $dryRun && ($token === '' || $this->chatId === '')) {
+        if (! $dryRun && ($token === '' || $this->chatIds === [])) {
             $this->error(".env'da SPOT_EVENTS_BOT_TOKEN va SPOT_EVENTS_CHAT_ID berilmagan.");
 
             return self::FAILURE;
@@ -116,7 +117,7 @@ class SpotEventsCommand extends Command
                 continue;
             }
 
-            if (! $this->send($this->announcement($event), $event->url)) {
+            if (! $this->sendToChats($event, 'notified_chats', $this->announcement($event))) {
                 $failed++;
 
                 continue;
@@ -157,7 +158,7 @@ class SpotEventsCommand extends Command
                 continue;
             }
 
-            if (! $this->send($this->reminder($event), $event->url)) {
+            if (! $this->sendToChats($event, 'reminded_chats', $this->reminder($event))) {
                 $failed++;
 
                 continue;
@@ -245,15 +246,37 @@ class SpotEventsCommand extends Command
         return $event->start_time ? "{$date}, {$event->start_time}" : $date;
     }
 
-    private function send(string $html, string $previewUrl): bool
+    /**
+     * Xabarni hali olmagan chatlarga yuboradi va kimga ketganini $column'ga yozadi —
+     * bitta chatga yuborib bo'lmasa, keyingi safar faqat o'shanga qayta yuboriladi.
+     *
+     * @return bool hamma chatga yetib bordimi
+     */
+    private function sendToChats(SpotEvent $event, string $column, string $html): bool
     {
-        $ok = $this->telegram->sendMessage($this->chatId, $html, [
+        $sent = $event->{$column} ?? [];
+
+        foreach (array_diff($this->chatIds, $sent) as $chatId) {
+            if ($this->send($chatId, $html, $event->url)) {
+                $sent[] = $chatId;
+            }
+        }
+
+        $event->{$column} = array_values($sent);
+        $event->save();
+
+        return array_diff($this->chatIds, $sent) === [];
+    }
+
+    private function send(string $chatId, string $html, string $previewUrl): bool
+    {
+        $ok = $this->telegram->sendMessage($chatId, $html, [
             'parse_mode' => 'HTML',
             'link_preview_options' => ['url' => $previewUrl],
         ]);
 
         if (! $ok) {
-            Log::warning("spot:events — Telegram'ga yuborilmadi: {$previewUrl}");
+            Log::warning("spot:events — Telegram'ga ({$chatId}) yuborilmadi: {$previewUrl}");
         }
 
         Sleep::for(1)->second(); // Telegram: bitta chatga sekundiga ~1 xabar
@@ -270,6 +293,8 @@ class SpotEventsCommand extends Command
             return;
         }
 
-        $this->telegram->sendMessage($this->chatId, $message);
+        foreach ($this->chatIds as $chatId) {
+            $this->telegram->sendMessage($chatId, $message);
+        }
     }
 }
