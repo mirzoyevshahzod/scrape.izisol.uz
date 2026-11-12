@@ -83,3 +83,16 @@ Schedule::command('telegram:send-daily-files')
 Schedule::command('telegram:daily-status')
     ->dailyAt('09:00')
     ->withoutOverlapping();
+
+/*
+|--------------------------------------------------------------------
+| spot.uz tadbirlari — har 2 soatda
+|--------------------------------------------------------------------
+| Yangi kerakli tadbirlar e'loni va "ertaga" eslatmasi (eslatma faqat
+| 09:00 dan keyin) SPOT_EVENTS_CHAT_ID'ga (config/spot_events.php).
+| Muammo bo'lsa, buyruqning o'zi o'sha chatga ogohlantiradi.
+*/
+
+Schedule::command('spot:events')
+    ->everyTwoHours()
+    ->withoutOverlapping();

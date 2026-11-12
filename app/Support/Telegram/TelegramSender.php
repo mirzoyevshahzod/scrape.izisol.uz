@@ -28,13 +28,17 @@ class TelegramSender
         $this->apiUrl = 'https://api.telegram.org/bot' . $botToken . '/';
     }
 
-    public function sendMessage(string $chatId, string $text): bool
+    /**
+     * @param  array<string,mixed>  $options  Bot API'ning qo'shimcha parametrlari (parse_mode, link_preview_options, ...)
+     */
+    public function sendMessage(string $chatId, string $text, array $options = []): bool
     {
         try {
             return Http::connectTimeout(8)
                 ->timeout(30)
                 ->retry(5, 3000)
                 ->post($this->apiUrl . 'sendMessage', [
+                    ...$options,
                     'chat_id' => $chatId,
                     'text' => $text,
                 ])
