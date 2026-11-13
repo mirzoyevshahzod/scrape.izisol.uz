@@ -19,6 +19,19 @@
         tr.event-past td {
             opacity: 0.55;
         }
+        .keyword-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 4px 8px 4px 12px;
+            border-radius: 999px;
+            background: var(--ui-primary-soft);
+            font-size: 0.875rem;
+            font-weight: 500;
+        }
+        .keyword-chip .btn-close {
+            font-size: 0.6rem;
+        }
     </style>
 @endpush
 
@@ -49,14 +62,42 @@
         <span class="stat-pill"><span class="text-muted">Jami tadbirlar:</span><b>{{ $stats['total'] }}</b></span>
         <span class="stat-pill"><span class="text-muted">Mos, hali o'tmagan:</span><b>{{ $stats['upcoming'] }}</b></span>
         <span class="stat-pill"><span class="text-muted">Telegram'ga yuborilgan:</span><b>{{ $stats['sent'] }}</b></span>
-        <span class="stat-pill" title=".env: SPOT_EVENTS_KEYWORDS">
-            <span class="text-muted">Kalit so'zlar:</span>
-            @forelse ($keywords as $keyword)
-                <span class="badge bg-primary-subtle text-primary-emphasis">{{ $keyword }}</span>
-            @empty
-                <span class="text-muted">yo'q</span>
-            @endforelse
-        </span>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-header"><i class="fas fa-key me-2 text-muted"></i>Kalit so'zlar</div>
+        <div class="card-body">
+            <div class="d-flex flex-wrap gap-2 mb-3" id="keyword-list">
+                @forelse ($keywords as $keyword)
+                    <form method="POST" action="{{ route('spot-events.keywords.destroy', $keyword) }}" class="keyword-chip">
+                        @csrf
+                        @method('DELETE')
+                        <span>{{ $keyword->keyword }}</span>
+                        <button type="submit" class="btn-close btn-close-sm" aria-label="O'chirish" title="O'chirish"
+                                data-keyword="{{ $keyword->keyword }}"></button>
+                    </form>
+                @empty
+                    <span class="text-danger small"><i class="fas fa-triangle-exclamation me-1"></i>Kalit so'z yo'q — Telegram'ga hech narsa yuborilmaydi.</span>
+                @endforelse
+            </div>
+
+            <form method="POST" action="{{ route('spot-events.keywords.store') }}" class="d-flex flex-wrap gap-2 align-items-start">
+                @csrf
+                <div style="flex: 1 1 240px; max-width: 360px">
+                    <input type="text" name="keyword" value="{{ old('keyword') }}" maxlength="100" required
+                           class="form-control form-control-sm @if ($errors->keyword->has('keyword')) is-invalid @endif"
+                           placeholder="Yangi kalit so'z, masalan: конференция">
+                    @if ($errors->keyword->has('keyword'))
+                        <div class="invalid-feedback">{{ $errors->keyword->first('keyword') }}</div>
+                    @endif
+                </div>
+                <button type="submit" class="btn btn-sm btn-primary"><i class="fas fa-plus me-1"></i>Qo'shish</button>
+            </form>
+            <div class="small text-muted mt-2">
+                Tadbir sarlavhasida shu so'zlardan biri bo'lsa, Telegram'ga yuboriladi. Ruscha yozing; katta-kichik harf va defis farq qilmaydi,
+                so'z qismi ham mos keladi (<i>форум</i> → <i>бизнес-форум</i>, <i>форума</i>).
+            </div>
+        </div>
     </div>
 
     <div class="card">
@@ -217,6 +258,25 @@
 
                 render(data.run);
                 pollTimer = setTimeout(poll, 2000);
+            });
+
+            document.querySelectorAll('.keyword-chip .btn-close').forEach(function (closeButton) {
+                closeButton.addEventListener('click', function (event) {
+                    event.preventDefault();
+                    const form = closeButton.closest('form');
+
+                    uiConfirm({
+                        title: '"' + closeButton.dataset.keyword + '" o\'chirilsinmi?',
+                        message: 'Bu so\'zga mos yangi tadbirlar endi Telegram\'ga yuborilmaydi. Avval yuborilganlariga ta\'sir qilmaydi.',
+                        icon: 'fa-trash',
+                        variant: 'danger',
+                        confirmText: 'O\'chirish',
+                        onConfirm: function () {
+                            form.submit();
+                            return true;
+                        },
+                    });
+                });
             });
 
             render(@json($lastRun));

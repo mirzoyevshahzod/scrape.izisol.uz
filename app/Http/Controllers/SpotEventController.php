@@ -5,16 +5,20 @@ namespace App\Http\Controllers;
 use App\Jobs\RunOperationJob;
 use App\Models\JobRun;
 use App\Models\SpotEvent;
+use App\Models\SpotEventKeyword;
+use App\Services\SpotEventsClient;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\View\View;
 
 /**
- * "Spot.uz tadbirlari" sahifasi: spot:events yig'gan tadbirlar ro'yxati va
- * "Qidirish" tugmasi — spot:events'ni jadvalni kutmasdan hozir ishga
- * tushiradi (queue orqali, config/operations.php'dagi yashirin amal).
+ * "Spot.uz tadbirlari" sahifasi: spot:events yig'gan tadbirlar ro'yxati,
+ * kalit so'zlarni qo'shish/o'chirish va "Qidirish" tugmasi — spot:events'ni
+ * jadvalni kutmasdan hozir ishga tushiradi (queue orqali,
+ * config/operations.php'dagi yashirin amal).
  */
 class SpotEventController extends Controller
 {
@@ -50,10 +54,65 @@ class SpotEventController extends Controller
                     ->where(fn ($query) => $query->whereNull('ends_on')->orWhereDate('ends_on', '>=', $today))->count(),
                 'sent' => SpotEvent::whereNotNull('notified_at')->count(),
             ],
-            'keywords' => config('spot_events.keywords'),
+            'keywords' => SpotEventKeyword::orderBy('id')->get(),
             'chatCount' => count(config('spot_events.chat_ids')),
             'lastRun' => $this->latestRun(),
         ]);
+    }
+
+    public function storeKeyword(Request $request): RedirectResponse
+    {
+        $keyword = trim(preg_replace('/\s+/u', ' ', (string) $request->input('keyword')));
+        $request->merge(['keyword' => $keyword]);
+
+        $request->validateWithBag('keyword', [
+            'keyword' => ['required', 'string', 'min:2', 'max:100', function ($attribute, $value, $fail) {
+                $normalized = SpotEventsClient::normalizeForMatch($value);
+
+                if (SpotEventKeyword::pluck('keyword')->contains(fn ($k) => SpotEventsClient::normalizeForMatch($k) === $normalized)) {
+                    $fail('Bu kalit so\'z allaqachon bor.');
+                }
+            }],
+        ], [
+            'keyword.required' => 'Kalit so\'zni yozing.',
+            'keyword.min' => 'Kalit so\'z kamida 2 ta belgi bo\'lsin.',
+            'keyword.max' => 'Kalit so\'z 100 ta belgidan oshmasin.',
+        ]);
+
+        SpotEventKeyword::create(['keyword' => $keyword]);
+        $this->rematch();
+
+        // shu so'zga mos, hali yuborilmagan va o'tib ketmagan tadbirlar — keyingi qidiruvda ketadi
+        $pending = SpotEvent::whereNull('notified_at')
+            ->where(fn ($query) => $query->whereNull('ends_on')->orWhereDate('ends_on', '>=', Carbon::today()))
+            ->get()
+            ->filter(fn (SpotEvent $event) => SpotEventsClient::matchKeyword($event->title, [$keyword]))
+            ->count();
+
+        return redirect()->route('spot-events.index')->with('status', "\"{$keyword}\" qo'shildi."
+            . ($pending ? " Unga mos {$pending} ta yangi tadbir bor — keyingi qidiruvda (yoki \"Qidirish\" bosilsa) Telegram'ga yuboriladi." : ''));
+    }
+
+    public function destroyKeyword(SpotEventKeyword $keyword): RedirectResponse
+    {
+        $keyword->delete();
+        $this->rematch();
+
+        return redirect()->route('spot-events.index')->with('status', "\"{$keyword->keyword}\" o'chirildi.");
+    }
+
+    /**
+     * Kalit so'zlar o'zgargach, bazadagi tadbirlarning mosligini qayta hisoblaydi
+     * (sahifa darhol to'g'ri ko'rsatsin; yuborish baribir spot:events'da).
+     */
+    private function rematch(): void
+    {
+        $keywords = SpotEventKeyword::list();
+
+        SpotEvent::query()->each(function (SpotEvent $event) use ($keywords) {
+            $event->matched_keyword = SpotEventsClient::matchKeyword($event->title, $keywords);
+            $event->save();
+        });
     }
 
     public function run(Request $request): JsonResponse

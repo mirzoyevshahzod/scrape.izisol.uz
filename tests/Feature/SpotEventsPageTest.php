@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Jobs\RunOperationJob;
 use App\Models\JobRun;
 use App\Models\SpotEvent;
+use App\Models\SpotEventKeyword;
 use App\Models\User;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -69,10 +70,37 @@ class SpotEventsPageTest extends TestCase
             ->assertSee('PizzaPitch')->assertDontSee('Бизнес-завтрак');
     }
 
+    public function test_keywords_are_seeded_and_managed_from_the_page(): void
+    {
+        $this->assertSame(['B2B', 'форум', 'бизнес-завтрак'], SpotEventKeyword::list());
+
+        $this->event('Международная конференция Outsourcing', ['starts_on' => '2026-11-25', 'ends_on' => '2026-11-25']);
+        $this->event('Конференция прошлого года', ['starts_on' => '2026-11-01', 'ends_on' => '2026-11-01']);
+        $this->actingAs($this->userWith(['page.spot-events']));
+
+        $this->post(route('spot-events.keywords.store'), ['keyword' => '  конференция '])
+            ->assertRedirect(route('spot-events.index'))
+            ->assertSessionHas('status', fn ($status) => str_contains($status, 'Unga mos 1 ta yangi tadbir bor'));
+        $this->assertContains('конференция', SpotEventKeyword::list());
+        $this->assertSame('конференция', SpotEvent::where('title', 'like', 'Международная%')->value('matched_keyword'));
+
+        // dublikat (katta harf, defis/bo'shliq farqi bilan ham)
+        $this->post(route('spot-events.keywords.store'), ['keyword' => 'Бизнес завтрак'])
+            ->assertSessionHasErrorsIn('keyword', 'keyword');
+        $this->post(route('spot-events.keywords.store'), ['keyword' => ''])
+            ->assertSessionHasErrorsIn('keyword', 'keyword');
+
+        $keyword = SpotEventKeyword::where('keyword', 'конференция')->sole();
+        $this->delete(route('spot-events.keywords.destroy', $keyword))->assertRedirect(route('spot-events.index'));
+        $this->assertNotContains('конференция', SpotEventKeyword::list());
+        $this->assertNull(SpotEvent::where('title', 'like', 'Международная%')->value('matched_keyword'));
+    }
+
     public function test_page_needs_its_permission(): void
     {
         $this->actingAs($this->userWith(['page.zitic']))->get(route('spot-events.index'))->assertForbidden();
         $this->post(route('spot-events.run'))->assertForbidden();
+        $this->post(route('spot-events.keywords.store'), ['keyword' => 'x'])->assertForbidden();
     }
 
     public function test_search_button_queues_spot_events_once(): void

@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\SpotEvent;
+use App\Models\SpotEventKeyword;
 use App\Services\SpotEventsClient;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
@@ -24,8 +25,12 @@ class SpotEventsTest extends TestCase
         config([
             'spot_events.bot_token' => 'TEST',
             'spot_events.chat_ids' => ['123'],
-            'spot_events.keywords' => ['B2B', 'форум', 'бизнес-завтрак'],
         ]);
+
+        SpotEventKeyword::query()->delete();
+        foreach (['B2B', 'форум', 'бизнес-завтрак'] as $keyword) {
+            SpotEventKeyword::create(['keyword' => $keyword]);
+        }
     }
 
     /** spot.uz/ru/events kartasi (tuzilishi haqiqiy sahifadan). $cards: [href, sarlavha, sana, kategoriya, shahar, narx|null] */

@@ -225,7 +225,8 @@ class SpotEventsClient
         return null;
     }
 
-    private static function normalizeForMatch(string $text): string
+    /** Solishtirish uchun ko'rinish: kichik harf, defis va ortiqcha bo'shliqlarsiz */
+    public static function normalizeForMatch(string $text): string
     {
         $text = mb_strtolower(self::clean($text));
         $text = preg_replace('/[\-‐‑‒–—]+/u', ' ', $text);

@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Models\SpotEvent;
+use App\Models\SpotEventKeyword;
 use App\Services\SpotEventsClient;
 use App\Support\Telegram\TelegramSender;
 use Illuminate\Console\Command;
@@ -15,7 +16,7 @@ use Throwable;
 /**
  * spot.uz/ru/events sahifasidagi tadbirlarni ko'rib chiqadi:
  *  1) hammasini spot_events jadvaliga yozadi (url bo'yicha upsert);
- *  2) sarlavhasida kalit so'z bor (config/spot_events.php), hali tugamagan va
+ *  2) sarlavhasida kalit so'z bor (admin panelda kiritiladi), hali tugamagan va
  *     hali yuborilmagan tadbirlarni Telegram'ga e'lon qiladi;
  *  3) ertaga boshlanadigan, e'lon qilingan tadbirlar uchun eslatma yuboradi
  *     (09:00 dan keyin; buyruq har 2 soatda ishlaydi).
@@ -48,7 +49,7 @@ class SpotEventsCommand extends Command
         }
 
         $this->telegram = new TelegramSender($token);
-        $keywords = config('spot_events.keywords');
+        $keywords = SpotEventKeyword::list();
 
         try {
             $events = $client->events();

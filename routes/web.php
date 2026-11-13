@@ -40,11 +40,13 @@ Route::middleware('auth')->group(function () {
         Route::get('/missing/export', [MintransController::class, 'exportMissing'])->name('missing.export');
         Route::post('/missing/recheck', [MintransController::class, 'recheckMissing'])->name('missing.recheck');
     });
-    // spot.uz tadbirlari: ro'yxat va "Qidirish" (spot:events'ni hozir ishga tushirish)
+    // spot.uz tadbirlari: ro'yxat, kalit so'zlar va "Qidirish" (spot:events'ni hozir ishga tushirish)
     Route::prefix('spot-events')->name('spot-events.')->middleware('permission:page.spot-events')->group(function () {
         Route::get('/', [SpotEventController::class, 'index'])->name('index');
         Route::post('/run', [SpotEventController::class, 'run'])->name('run');
         Route::get('/status', [SpotEventController::class, 'status'])->name('status');
+        Route::post('/keywords', [SpotEventController::class, 'storeKeyword'])->name('keywords.store');
+        Route::delete('/keywords/{keyword}', [SpotEventController::class, 'destroyKeyword'])->name('keywords.destroy');
     });
 
     //Belarus scraping
