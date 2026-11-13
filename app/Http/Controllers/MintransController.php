@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Jobs\RunOperationJob;
 use App\Models\JobRun;
+use App\Models\MintransFound;
 use App\Models\MintransNotFound;
 use App\Services\MintransClient;
 use Illuminate\Http\JsonResponse;
@@ -31,7 +32,7 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 class MintransController extends Controller
 {
     /** bosqich => amal (config/operations.php) */
-    private const OPERATIONS = ['full' => 'mintrans', 'names' => 'mintrans-names', 'inn' => 'mintrans-inn'];
+    private const OPERATIONS = ['full' => 'mintrans', 'names' => 'mintrans-names', 'inn' => 'mintrans-inn', 'import' => 'mintrans-import'];
 
     /** natija fayli nomiga qo'shimcha (2- va 3-bosqichdan boshlanganda) */
     private const SUFFIXES = ['names' => '_formatlangan', 'inn' => '_inn'];
@@ -48,6 +49,7 @@ class MintransController extends Controller
             'maxUploadMb' => self::effectiveUploadLimitMb(),
             'missingCount' => MintransNotFound::where('status', MintransNotFound::NOT_FOUND)->count(),
             'missingErrors' => MintransNotFound::where('status', MintransNotFound::ERROR)->count(),
+            'foundCount' => MintransFound::count(),
             'recoveredTotal' => $this->recoveredTotal(),
         ]);
     }
@@ -58,6 +60,7 @@ class MintransController extends Controller
             'file' => ['required', 'file', 'mimes:xlsx,xls,csv', 'max:10240'],
             'stage' => ['nullable', 'in:full,names,inn'],
             'skip_missing' => ['nullable', 'boolean'],
+            'skip_found' => ['nullable', 'boolean'],
         ], [
             'file.required' => 'Excel faylni tanlang.',
             'file.mimes' => 'Faqat .xlsx, .xls yoki .csv fayl.',
@@ -102,6 +105,7 @@ class MintransController extends Controller
                 // 1-bosqich A ustundan ajratgan avtoraqamlar ro'yxati (so'rovlardan oldin yoziladi)
                 'plates' => "{$resultDir}/raqamlar_" . now()->format('Y_m_d_H_i_s') . '.xlsx',
                 'skip_missing' => $request->boolean('skip_missing'),
+                'skip_found' => $request->boolean('skip_found'),
             ];
 
         $run = $this->queueRun($request, $operation, $params);
@@ -223,7 +227,49 @@ class MintransController extends Controller
     {
         $runs = JobRun::with('user:id,name')->whereIn('operation', self::OPERATIONS)->latest('id')->limit(20)->get();
 
-        return response()->json(['runs' => $runs->map(fn ($run) => $this->present($run))]);
+        return response()->json([
+            'runs' => $runs->map(fn ($run) => $this->present($run)),
+            'found_total' => MintransFound::count(),
+        ]);
+    }
+
+    /**
+     * Qo'ldagi tayyor Excel'dagi (odatda 3-bosqich natijasi) topilgan raqamlarni
+     * bazaga yuklash (mintrans:import-found, queue orqali).
+     */
+    public function importFound(Request $request): JsonResponse
+    {
+        $request->validate([
+            'file' => ['required', 'file', 'mimes:xlsx,xls,csv', 'max:' . (int) (self::effectiveUploadLimitMb() * 1024)],
+            'overwrite' => ['nullable', 'boolean'],
+        ], [
+            'file.required' => 'Excel faylni tanlang.',
+            'file.mimes' => 'Faqat .xlsx, .xls yoki .csv fayl.',
+            'file.max' => 'Fayl juda katta.',
+            'file.uploaded' => 'Fayl serverga yuklanmadi: hajmi serverning PHP chegarasidan katta ('
+                . self::effectiveUploadLimitMb() . ' MB).',
+        ]);
+
+        $upload = $request->file('file');
+        $name = Str::uuid() . '.' . ($upload->guessExtension() ?: 'xlsx');
+        $dir = storage_path('app/mintrans/uploads');
+        $upload->move($dir, $name);
+
+        $run = $this->queueRun($request, self::OPERATIONS['import'], [
+            'file' => "{$dir}/{$name}",
+            'original_name' => mb_substr($upload->getClientOriginalName(), 0, 150),
+            'overwrite' => $request->boolean('overwrite'),
+        ]);
+
+        if (! $run) {
+            @unlink("{$dir}/{$name}");
+
+            return response()->json(['message' => 'Bazaga yuklash allaqachon ishlayapti — tugashini kuting.'], 409);
+        }
+
+        RunOperationJob::dispatch($run);
+
+        return response()->json(['message' => 'Fayl qabul qilindi, topilgan raqamlar bazaga yuklanmoqda.', 'run' => $this->present($run)], 202);
     }
 
     public function show(JobRun $run): JsonResponse
@@ -324,6 +370,7 @@ class MintransController extends Controller
             'stage' => array_search($run->operation, self::OPERATIONS, true) ?: 'full',
             'file' => $run->params['original_name'] ?? '—',
             'skip_missing' => (bool) ($run->params['skip_missing'] ?? false),
+            'skip_found' => (bool) ($run->params['skip_found'] ?? false),
             'from_missing' => ($run->params['source'] ?? null) === 'missing',
             'status' => $stale ? 'stale' : $run->status,
             'active' => $isActive && ! $stale,

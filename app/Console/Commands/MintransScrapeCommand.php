@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Models\JobRun;
+use App\Models\MintransFound;
 use App\Models\MintransNotFound;
 use App\Services\MintransClient;
 use App\Support\UzbekPlates;
@@ -21,11 +22,16 @@ use Throwable;
  * 1-bosqich: Excel'ning A ustunidan O'zbekiston avtomobil raqamlarini ajratib
  * (qolgan yozuvlar tashlab yuboriladi), har birini Mintrans API'dan so'raydi.
  *
- * - topildi    -> har bir litsenziya natija Excel'iga alohida qator; raqam
- *                 "topilmagan raqamlar" ro'yxatida bo'lsa — o'chiriladi va
- *                 "avval topilmagan, endi topildi" (recovered) deb sanaladi;
- * - topilmadi  -> mintrans_not_found jadvaliga (Excel'ga yozilmaydi);
+ * - topildi    -> har bir litsenziya natija Excel'iga alohida qator va
+ *                 mintrans_found jadvaliga; raqam "topilmagan raqamlar"
+ *                 ro'yxatida bo'lsa — o'chiriladi va "avval topilmagan, endi
+ *                 topildi" (recovered) deb sanaladi;
+ * - topilmadi  -> mintrans_not_found jadvaliga (Excel'ga yozilmaydi),
+ *                 mintrans_found'dagi eski ma'lumoti o'chiriladi;
  * - xatolik    -> mintrans_not_found jadvaliga xato matni bilan + log.
+ *
+ * --skip-known-found bilan mintrans_found'da bor raqamlar Mintrans'ga
+ * so'ralmaydi — saqlangan ma'lumot natija Excel'iga yoziladi.
  *
  * Natija fayli har 50 ta raqamdan keyin saqlab boriladi (jarayon uzilsa
  * ma'lumot yo'qolmaydi). 2-bosqich — mintrans:clean-names.
@@ -37,6 +43,7 @@ class MintransScrapeCommand extends Command
                             {--output= : Natija fayli (bo\'sh bo\'lsa storage/app/mintrans/results/mintrans_result_<vaqt>.xlsx)}
                             {--delay=300 : So\'rovlar orasidagi pauza, ms (davlat saytini yuklamaslik uchun kamida 300)}
                             {--skip-known-missing : Avval "topilmadi" deb yozilgan raqamlarni qayta so\'ramaslik}
+                            {--skip-known-found : Avval topilgan raqamlarni qayta so\'ramaslik — saqlangan ma\'lumot (mintrans_found) natijaga yoziladi}
                             {--run= : Boshqaruv ishi (job_runs.id) — jarayon shu yozuvga yozib boriladi}
                             {--plates-output= : Ajratilgan avtoraqamlar ro\'yxatini (so\'rovlardan oldin) shu Excel faylga yozish}
                             {--resume : To\'xtab qolgan ishni davom ettirish: --output faylidagi va shu ish (--run) uchun "topilmadi" deb yozilgan raqamlar qayta so\'ralmaydi, yangi qatorlar fayl oxiriga qo\'shiladi}';
@@ -118,26 +125,43 @@ class MintransScrapeCommand extends Command
             $this->line("Davom ettirish: allaqachon tekshirilgan {$done} ta (topildi {$found}, topilmadi {$notFound}); qoldi: " . count($plates) . ' ta');
         }
 
+        // avval topilgan raqamlar: Mintrans'ga so'ralmaydi, ma'lumot bazadan yoziladi
+        $cached = $this->option('skip-known-found') && $plates ? MintransFound::licensesFor($plates) : [];
+
+        if ($cached) {
+            $this->line("Avval topilgani uchun Mintrans'ga so'ralmaydi (ma'lumot bazadan olinadi): " . count($cached) . ' ta');
+        }
+
         $sheet = $book->getActiveSheet();
         $row = $this->option('resume') ? $sheet->getHighestDataRow() + 1 : 2;
         $total = $done + count($plates);
         // davom ettirilganda oldingi qismda "endi topilgan"lar ham hisobda qoladi
         $recovered = $this->option('resume') ? (int) ($run?->params['progress']['recovered'] ?? 0) : 0;
-        $stats = ['total' => $total, 'done' => $done, 'found' => $found, 'not_found' => $notFound, 'errors' => 0, 'dropped' => $dropped, 'skipped' => $skipped, 'recovered' => $recovered];
+        $fromCache = $this->option('resume') ? (int) ($run?->params['progress']['cached'] ?? 0) : 0;
+        $stats = ['total' => $total, 'done' => $done, 'found' => $found, 'not_found' => $notFound, 'errors' => 0, 'dropped' => $dropped, 'skipped' => $skipped, 'recovered' => $recovered, 'cached' => $fromCache];
         $this->progress($run, $stats, $output);
 
         try {
             foreach ($plates as $i => $plate) {
                 $prefix = '[' . ($done + $i + 1) . "/{$total}] {$plate} — ";
                 $mark = fn (string $icon) => "{$icon} {$prefix}";
+                $queried = ! isset($cached[$plate]);
 
                 try {
-                    $licenses = $client->search($plate);
+                    if (! $queried) {
+                        foreach ($cached[$plate] as $license) {
+                            $this->writeRow($sheet, $row++, $license);
+                        }
 
-                    if ($licenses) {
+                        $stats['found']++;
+                        $stats['cached']++;
+                        $this->line($mark('💾') . "avval topilgan — ma'lumot bazadan olindi");
+                    } elseif ($licenses = $client->search($plate)) {
                         foreach ($licenses as $license) {
                             $this->writeRow($sheet, $row++, $license);
                         }
+
+                        MintransFound::record($plate, $licenses, $run?->id);
 
                         // avval topilmagan (yoki xato bergan) bo'lsa — ro'yxatdan chiqadi
                         $wasMissing = MintransNotFound::where('plate', $plate)->delete() > 0;
@@ -147,6 +171,7 @@ class MintransScrapeCommand extends Command
                             . ($wasMissing ? " — avval topilmagan edi, ro'yxatdan olib tashlandi" : ''));
                     } else {
                         MintransNotFound::record($plate, MintransNotFound::NOT_FOUND, null, $run?->id);
+                        MintransFound::where('plate', $plate)->delete(); // avval topilgan bo'lsa, endi eskirgan
                         $stats['not_found']++;
                         $this->line($mark('❌') . "ma'lumot chiqmadi");
                     }
@@ -165,7 +190,8 @@ class MintransScrapeCommand extends Command
                     $this->save($book, $output);
                 }
 
-                if ($i < count($plates) - 1) {
+                // pauza faqat Mintrans'ga so'rov yuborilganda
+                if ($queried && $i < count($plates) - 1) {
                     Sleep::usleep($delayMs * 1000);
                 }
             }
@@ -175,6 +201,7 @@ class MintransScrapeCommand extends Command
 
         $this->line('');
         $this->info("Jami: {$stats['total']} · Topildi: {$stats['found']} · Topilmadi: {$stats['not_found']} · Xatolik: {$stats['errors']}"
+            . ($stats['cached'] ? " · shundan bazadan (qayta so'ralmagan): {$stats['cached']}" : '')
             . ($stats['recovered'] ? " · avval topilmaganlardan endi topildi: {$stats['recovered']}" : ''));
         $this->line("Natija: {$output}");
 

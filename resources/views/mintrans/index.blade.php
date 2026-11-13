@@ -105,7 +105,15 @@
                         </label>
                         <input type="file" id="file-input" name="file" accept=".xlsx,.xls,.csv" class="d-none">
 
-                        <div class="form-check" id="skip-missing-wrap">
+                        <div class="form-check skip-wrap">
+                            <input class="form-check-input" type="checkbox" id="skip-found" name="skip_found" checked>
+                            <label class="form-check-label" for="skip-found">
+                                Avval topilgan raqamlarni qayta so'ramaslik
+                                <span class="text-muted small d-block">Ma'lumoti avval olingan raqamlar (bazada: <b id="found-total">{{ $foundCount }}</b> ta) Mintrans'ga so'ralmaydi — saqlangan ma'lumot natijaga yoziladi. Yangilangan ma'lumot kerak bo'lsa, belgini olib tashlang.</span>
+                            </label>
+                        </div>
+
+                        <div class="form-check skip-wrap" id="skip-missing-wrap">
                             <input class="form-check-input" type="checkbox" id="skip-missing" name="skip_missing">
                             <label class="form-check-label" for="skip-missing">
                                 Avval topilmagan raqamlarni qayta so'ramaslik
@@ -163,6 +171,32 @@
         </div>
     </div>
 
+    <div class="card mb-4">
+        <div class="card-header d-flex align-items-center justify-content-between">
+            <span><i class="fas fa-database me-2 text-muted"></i>Topilgan raqamlar bazasi <span class="badge bg-success-subtle text-success-emphasis ms-1" id="found-total-badge">{{ $foundCount }}</span></span>
+        </div>
+        <div class="card-body">
+            <p class="small text-muted mb-3">
+                Bazadagi raqamlar 1-bosqichda Mintrans'ga qayta so'ralmaydi. Qo'lingizdagi tayyor natija Excel'ini (masalan 3-bosqichdan keyingi fayl) yuklab,
+                undagi raqamlarni bazaga qo'shishingiz mumkin. Ustunlar sarlavha bo'yicha topiladi: <b>Davlat raqami</b> majburiy; Rusumi, Korxona nomi va
+                boshqa ustunlar bo'lsa olinadi; <b>инн</b> ustuni bo'lsa, 3-bosqich ham shu nomlarni orginfo.uz'dan qayta qidirmaydi.
+            </p>
+            <div class="d-flex flex-wrap gap-3 align-items-center">
+                <input type="file" id="import-file" accept=".xlsx,.xls,.csv" class="form-control form-control-sm" style="max-width: 360px">
+                <div class="form-check mb-0">
+                    <input class="form-check-input" type="checkbox" id="import-overwrite">
+                    <label class="form-check-label small" for="import-overwrite">
+                        Bazada bor raqamlarni ham almashtirish
+                        <span class="text-muted">(topilgan va "topilmadi" deb yozilganlar)</span>
+                    </label>
+                </div>
+                <button type="button" class="btn btn-sm btn-primary" id="import-btn" disabled>
+                    <i class="fas fa-upload me-1"></i>Bazaga yuklash
+                </button>
+            </div>
+        </div>
+    </div>
+
     <div class="card">
         <div class="card-header"><i class="fas fa-clock-rotate-left me-2 text-muted"></i>Ishlar tarixi</div>
         <div class="table-responsive">
@@ -215,6 +249,7 @@
                 ping: @json(route('mintrans.ping')),
                 missing: @json(route('mintrans.missing')),
                 recheck: @json(route('mintrans.missing.recheck')),
+                importFound: @json(route('mintrans.found.import')),
             };
 
             const STATUS = {
@@ -260,7 +295,8 @@
                     ['❌ Topilmadi', progress.not_found],
                     ['⚠️ Xatolik', progress.errors],
                     ['Tashlab yuborilgan yozuv', progress.dropped],
-                ].concat(progress.skipped ? [['O\'tkazib yuborildi', progress.skipped]] : [])
+                ].concat(progress.cached ? [['💾 Bazadan (so\'ralmagan)', progress.cached]] : [])
+                    .concat(progress.skipped ? [['O\'tkazib yuborildi', progress.skipped]] : [])
                     .concat(progress.recovered ? [['♻️ Avval topilmagan, endi topildi', progress.recovered]] : []).forEach(function ([label, value]) {
                     const pill = el('span', 'stat-pill');
                     pill.append(el('span', 'text-muted', label + ':'), el('b', null, value));
@@ -325,7 +361,7 @@
 
             function syncStage() {
                 const stage = selectedStage();
-                document.getElementById('skip-missing-wrap').classList.toggle('d-none', stage !== 'full');
+                document.querySelectorAll('.skip-wrap').forEach(function (wrap) { wrap.classList.toggle('d-none', stage !== 'full'); });
                 document.getElementById('start-label').textContent = { full: 'Boshlash', names: 'Nomlarni formatlash va INN', inn: 'INN qo\'shish' }[stage];
             }
 
@@ -362,6 +398,7 @@
                 form.append('file', fileInput.files[0]);
                 form.append('stage', selectedStage());
                 form.append('skip_missing', document.getElementById('skip-missing').checked ? '1' : '0');
+                form.append('skip_found', document.getElementById('skip-found').checked ? '1' : '0');
 
                 startBtn.disabled = true;
 
@@ -415,6 +452,7 @@
                         progressCell.append(bar, el('div', 'small text-muted',
                             run.progress.done + '/' + run.progress.total + ' · ✅ ' + run.progress.found + ' · ❌ ' + run.progress.not_found +
                             (run.progress.errors ? ' · ⚠️ ' + run.progress.errors : '') +
+                            (run.progress.cached ? ' · 💾 ' + run.progress.cached : '') +
                             (run.progress.recovered ? ' · ♻️ ' + run.progress.recovered : '')));
                     } else if (!run.inn) {
                         progressCell.append(el('span', 'text-muted small', '—'));
@@ -462,6 +500,7 @@
                     fileCell.append(fileName);
                     if (run.stage === 'names') fileCell.append(el('span', 'badge bg-primary-subtle text-primary-emphasis ms-1', '2-bosqichdan'));
                     if (run.stage === 'inn') fileCell.append(el('span', 'badge bg-primary-subtle text-primary-emphasis ms-1', '3-bosqich'));
+                    if (run.stage === 'import') fileCell.append(el('span', 'badge bg-success-subtle text-success-emphasis ms-1', 'bazaga yuklash'));
                     if (run.from_missing) fileCell.append(el('span', 'badge bg-info-subtle text-info-emphasis ms-1', 'qayta tekshiruv'));
                     if (run.skip_missing) fileCell.append(el('span', 'badge bg-secondary-subtle text-secondary-emphasis ms-1', 'eskilarsiz'));
 
@@ -512,6 +551,10 @@
                     const data = await response.json();
 
                     renderRuns(data.runs);
+                    if (data.found_total !== undefined) {
+                        document.getElementById('found-total').textContent = data.found_total;
+                        document.getElementById('found-total-badge').textContent = data.found_total;
+                    }
 
                     const anyActive = data.runs.some(function (run) { return run.active; });
                     // bitta bosqich bir vaqtda faqat bir marta — buni server tekshiradi (409)
@@ -646,6 +689,46 @@
             });
             document.getElementById('missing-prev').addEventListener('click', function () { if (missingPage > 1) { missingPage--; loadMissing(); } });
             document.getElementById('missing-next').addEventListener('click', function () { if (missingPage < missingLast) { missingPage++; loadMissing(); } });
+
+            // ---------- Topilgan raqamlarni bazaga yuklash ----------
+            const importFile = document.getElementById('import-file');
+            const importBtn = document.getElementById('import-btn');
+            importFile.addEventListener('change', function () { importBtn.disabled = !importFile.files[0]; });
+
+            importBtn.addEventListener('click', async function () {
+                if (!importFile.files[0]) return;
+
+                const sizeMb = importFile.files[0].size / 1048576;
+                if (sizeMb > MAX_UPLOAD_MB) {
+                    uiToast('Fayl ' + sizeMb.toFixed(1) + ' MB — serverga ' + MAX_UPLOAD_MB + ' MB gacha yuklash mumkin.', 'danger');
+                    return;
+                }
+
+                importBtn.disabled = true;
+                const form = new FormData();
+                form.append('file', importFile.files[0]);
+                form.append('overwrite', document.getElementById('import-overwrite').checked ? '1' : '0');
+
+                try {
+                    const response = await fetch(urls.importFound, { method: 'POST', headers: { Accept: 'application/json' }, body: form });
+                    const data = await response.json().catch(function () { return {}; });
+
+                    if (!response.ok) {
+                        const firstError = data.errors ? Object.values(data.errors)[0][0] : null;
+                        uiToast(firstError || data.message || 'Xatolik: HTTP ' + response.status, 'danger');
+                        importBtn.disabled = false;
+                        return;
+                    }
+
+                    uiToast(data.message, 'success');
+                    importFile.value = '';
+                    refresh();
+                    openOutput(data.run.id, data.run.file);
+                } catch (e) {
+                    uiToast('Tarmoq xatosi: ' + e.message, 'danger');
+                    importBtn.disabled = false;
+                }
+            });
 
             refresh();
             loadMissing();

@@ -4,7 +4,9 @@ namespace Tests\Feature;
 
 use App\Jobs\RunOperationJob;
 use App\Models\JobRun;
+use App\Models\MintransFound;
 use App\Models\MintransNotFound;
+use App\Models\OrginfoInn;
 use App\Models\User;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -133,6 +135,154 @@ class MintransTest extends TestCase
         $this->assertSame(2, MintransNotFound::where('plate', '01Z001ZZ')->value('checks'));
     }
 
+    public function test_found_plates_are_remembered_and_not_requested_again(): void
+    {
+        $this->fakeApi();
+
+        $this->artisan('mintrans:scrape', ['file' => $this->inputFile(['10S208NB', '01Z001ZZ']), '--output' => "{$this->dir}/r1.xlsx"])->assertSuccessful();
+
+        $saved = MintransFound::where('plate', '10S208NB')->sole();
+        $this->assertCount(2, $saved->licenses);
+        $this->assertSame('AT 10437262', $saved->licenses[1]['litsenziya']);
+        $this->assertDatabaseMissing('mintrans_found', ['plate' => '01Z001ZZ']);
+        $first = $this->rows("{$this->dir}/r1.xlsx");
+
+        // ikkinchi marta: 10S208NB Mintrans'ga so'ralmaydi, natija Excel'i bir xil
+        Http::fake(['info.mintrans.uz/*' => Http::response(['data' => null, 'pdfUrl' => null])]);
+        Sleep::fake(); // birinchi ishga tushirishdagi pauzalar hisobdan chiqadi
+        $output = "{$this->dir}/r2.xlsx";
+
+        $this->artisan('mintrans:scrape', ['file' => $this->inputFile(['10S208NB', '01Z001ZZ']), '--output' => $output, '--skip-known-found' => true])
+            ->expectsOutputToContain("Avval topilgani uchun Mintrans'ga so'ralmaydi (ma'lumot bazadan olinadi): 1 ta")
+            ->expectsOutputToContain("💾 [1/2] 10S208NB — avval topilgan — ma'lumot bazadan olindi")
+            ->expectsOutputToContain("shundan bazadan (qayta so'ralmagan): 1")
+            ->assertSuccessful();
+
+        Http::assertNotSent(fn ($request) => $request['autoN'] === '10S208NB');
+        Http::assertSent(fn ($request) => $request['autoN'] === '01Z001ZZ');
+        $this->assertSame($first, $this->rows($output));
+        Sleep::assertSleptTimes(0); // so'rovlar orasida pauza: faqat 01Z001ZZ so'raldi, undan keyin raqam yo'q
+    }
+
+    public function test_without_skip_found_plate_is_requested_and_stale_data_is_dropped(): void
+    {
+        MintransFound::record('10S208NB', [['raqam' => '10S208NB', 'litsenziya' => 'OLD']]);
+        Http::fake(['info.mintrans.uz/*' => Http::response(['data' => null, 'pdfUrl' => null])]);
+
+        $this->artisan('mintrans:scrape', ['file' => $this->inputFile(['10S208NB']), '--output' => "{$this->dir}/r.xlsx"])
+            ->expectsOutputToContain("❌ [1/1] 10S208NB — ma'lumot chiqmadi")
+            ->assertSuccessful();
+
+        $this->assertDatabaseMissing('mintrans_found', ['plate' => '10S208NB']);
+        $this->assertSame(MintransNotFound::NOT_FOUND, MintransNotFound::where('plate', '10S208NB')->value('status'));
+    }
+
+    /** 3-bosqich natijasi ko'rinishidagi fayl (ustunlar tartibi boshqacha — sarlavha bo'yicha topilishi kerak) */
+    private function foundFile(array $rows): string
+    {
+        $book = new Spreadsheet();
+        $book->getActiveSheet()->fromArray(array_merge([[
+            'Davlat raqami', 'Rusumi', "Yuk ko'tarish qobiliyati", 'Litsenziya varaqasi', 'Korxona nomi', 'инн', 'Telefon raqami',
+            'Yangi telefon raqami', 'Faoliyat turi', 'Transport turi', 'Yuk turi', 'Berilgan sana', 'Amal qilish muddati', 'Holati', 'Hududiy boshqarma',
+        ]], $rows));
+        foreach (range(2, count($rows) + 1) as $row) {
+            $book->getActiveSheet()->getCell("G{$row}")->setValueExplicit((string) $book->getActiveSheet()->getCell("G{$row}")->getValue(), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+        }
+        $path = "{$this->dir}/found-" . uniqid() . '.xlsx';
+        (new Xlsx($book))->save($path);
+
+        return $path;
+    }
+
+    private function foundRow(string $plate, string $license, string $company, string $inn = ''): array
+    {
+        return [$plate, 'MAN TGX', 20, $license, $company, $inn, '998901234567', '', 'Xalqaro yuk tashish', 'Yuk', 'Umumiy', '10.07.2026', '09.07.2027', 'Faol', 'Toshkent sh.'];
+    }
+
+    public function test_import_found_loads_plates_from_a_ready_excel(): void
+    {
+        MintransFound::record('01A111AA', [['raqam' => '01A111AA', 'litsenziya' => 'KEEP']]);
+        MintransNotFound::record('01B222BB', MintransNotFound::NOT_FOUND);
+        MintransNotFound::record('01C333CC', MintransNotFound::ERROR, 'timeout');
+
+        $file = $this->foundFile([
+            $this->foundRow('10 S 208 NB', 'AT 1', 'OOO "BAXT TRANSPORT"', '308413072'),
+            $this->foundRow('10S208NB', 'AT 2', 'OOO "BAXT TRANSPORT"', '308413072'),
+            $this->foundRow('10S208NB', 'AT 2', 'OOO "BAXT TRANSPORT"', '308413072'), // takror qator
+            $this->foundRow('01A111AA', 'AT NEW', 'OOO "A"'),
+            $this->foundRow('01B222BB', 'AT B', 'OOO "B"'),
+            $this->foundRow('01C333CC', 'AT C', 'OOO "X******* M******"', '111111111'),
+            $this->foundRow('Ali Valiyev', 'AT X', 'OOO "X"'),
+            ['', '', '', '', '', '', '', '', '', '', '', '', '', '', ''],
+        ]);
+
+        $this->artisan('mintrans:import-found', ['file' => $file])
+            ->expectsOutputToContain("Ma'lumotli qatorlar: 7 ta; noyob raqamlar: 4 ta; raqami O'zbekiston avtoraqami emas — tashlab yuborildi: 1 ta")
+            ->expectsOutputToContain("Bazaga yangi qo'shildi: 2 ta")
+            ->expectsOutputToContain('Bazada allaqachon bor — tegilmadi: 1 ta')
+            ->expectsOutputToContain("\"Topilmagan raqamlar\" ro'yxatida — tegilmadi: 1 ta")
+            ->expectsOutputToContain("INN bazasiga qo'shildi (3-bosqich orginfo.uz'ga qayta so'ramaydi): 1 ta nom")
+            ->assertSuccessful();
+
+        $licenses = MintransFound::where('plate', '10S208NB')->value('licenses');
+        $this->assertCount(2, $licenses);
+        $this->assertSame(['berilgan' => '10.07.2026', 'boshqarma' => 'Toshkent sh.', 'faoliyat' => 'Xalqaro yuk tashish', 'holati' => 'Faol',
+            'korxona' => 'OOO "BAXT TRANSPORT"', 'litsenziya' => 'AT 1', 'muddati' => '09.07.2027', 'raqam' => '10S208NB', 'rusumi' => 'MAN TGX',
+            'telefon' => '998901234567', 'transport' => 'Yuk', 'yuk' => '20', 'yuk_turi' => 'Umumiy'], $licenses[0]);
+
+        $this->assertSame('KEEP', MintransFound::where('plate', '01A111AA')->value('licenses')[0]['litsenziya']); // tegilmadi
+        $this->assertDatabaseMissing('mintrans_found', ['plate' => '01B222BB']);                                      // "topilmadi" ro'yxatida
+        $this->assertDatabaseHas('mintrans_found', ['plate' => '01C333CC']);                                         // xatolik to'smaydi
+        $this->assertDatabaseMissing('mintrans_not_found', ['plate' => '01C333CC']);
+        $this->assertSame('308413072', OrginfoInn::where('name', 'OOO "BAXT TRANSPORT"')->value('inn'));
+        $this->assertDatabaseMissing('orginfo_inns', ['name' => 'OOO "X******* M******"']);                           // yashirin nom
+
+        // ustidan yozish: bazadagi va "topilmadi"dagilar ham almashtiriladi
+        $this->artisan('mintrans:import-found', ['file' => $file, '--overwrite' => true])
+            ->expectsOutputToContain('Bazada bor edi, yangilandi: 3 ta')
+            ->expectsOutputToContain("Bazaga yangi qo'shildi: 1 ta")
+            ->assertSuccessful();
+        $this->assertSame('AT NEW', MintransFound::where('plate', '01A111AA')->value('licenses')[0]['litsenziya']);
+        $this->assertDatabaseMissing('mintrans_not_found', ['plate' => '01B222BB']);
+
+        // 1-bosqich yuklangan raqamni Mintrans'ga so'ramaydi
+        Http::fake();
+        $output = "{$this->dir}/r.xlsx";
+        $this->artisan('mintrans:scrape', ['file' => $this->inputFile(['10S208NB']), '--output' => $output, '--skip-known-found' => true])
+            ->expectsOutputToContain("💾 [1/1] 10S208NB")
+            ->assertSuccessful();
+        Http::assertNothingSent();
+        $rows = $this->rows($output);
+        $this->assertSame(['MAN TGX', 20.0, 'AT 1', '10S208NB', 'OOO "BAXT TRANSPORT"', '998901234567'], array_slice(array_values($rows[2]), 0, 6));
+    }
+
+    public function test_import_found_needs_plate_column(): void
+    {
+        $this->artisan('mintrans:import-found', ['file' => $this->inputFile(['Raqam', '10S208NB'])])
+            ->expectsOutputToContain('"Davlat raqami" sarlavhali ustun topilmadi')
+            ->assertFailed();
+    }
+
+    public function test_import_found_endpoint_queues_job(): void
+    {
+        Queue::fake();
+        $this->actingAs($this->user(['page.mintrans-auto']));
+        $file = UploadedFile::fake()->createWithContent('topilganlar.xlsx', file_get_contents($this->foundFile([$this->foundRow('10S208NB', 'AT 1', 'OOO "A"')])));
+
+        $this->post(route('mintrans.found.import'), ['file' => $file, 'overwrite' => '1'], ['Accept' => 'application/json'])
+            ->assertStatus(202)
+            ->assertJsonPath('run.stage', 'import');
+
+        $run = JobRun::latest('id')->first();
+        $this->assertSame('mintrans-import', $run->operation);
+        $this->assertSame([['mintrans:import-found', ['file' => $run->params['file'], '--overwrite' => true, '--run' => $run->id]]], RunOperationJob::commandsFor($run));
+        Queue::assertPushed(RunOperationJob::class);
+        @unlink($run->params['file']);
+
+        $this->actingAs($this->user(['page.zitic']))
+            ->post(route('mintrans.found.import'), ['file' => $file], ['Accept' => 'application/json'])->assertForbidden();
+    }
+
     public function test_scrape_fails_when_every_request_errors(): void
     {
         Http::fake(['info.mintrans.uz/*' => Http::response('down', 500)]);
@@ -150,7 +300,7 @@ class MintransTest extends TestCase
 
         $params = $run->fresh()->params;
         $this->assertSame('a.xlsx', $params['original_name']);
-        $this->assertSame(['total' => 2, 'done' => 2, 'found' => 1, 'not_found' => 1, 'errors' => 0, 'dropped' => 0, 'skipped' => 0, 'recovered' => 0], $params['progress']);
+        $this->assertSame(['total' => 2, 'done' => 2, 'found' => 1, 'not_found' => 1, 'errors' => 0, 'dropped' => 0, 'skipped' => 0, 'recovered' => 0, 'cached' => 0], $params['progress']);
     }
 
     public function test_resume_continues_after_checked_plates_and_appends_rows(): void
@@ -190,7 +340,7 @@ class MintransTest extends TestCase
         $this->assertSame('OOO "BAXT TRANSPORT"', $rows[2]['E']); // oldingi qatorlar saqlangan
         $this->assertSame('01A222MC', $rows[3]['D']);
         $this->assertDatabaseMissing('mintrans_not_found', ['plate' => '10S208NB']);
-        $this->assertSame(['total' => 4, 'done' => 4, 'found' => 2, 'not_found' => 2, 'errors' => 0, 'dropped' => 0, 'skipped' => 0, 'recovered' => 0], $run->fresh()->params['progress']);
+        $this->assertSame(['total' => 4, 'done' => 4, 'found' => 2, 'not_found' => 2, 'errors' => 0, 'dropped' => 0, 'skipped' => 0, 'recovered' => 0, 'cached' => 0], $run->fresh()->params['progress']);
     }
 
     public function test_resume_endpoint_requeues_failed_full_run(): void
@@ -344,13 +494,15 @@ class MintransTest extends TestCase
         $this->actingAs($this->user(['page.mintrans-auto']));
         $file = new UploadedFile($this->inputFile(['10S208NB']), 'raqamlar.xlsx', null, null, true);
 
-        $this->post('/mintrans-auto/start', ['file' => $file, 'skip_missing' => '1'], ['Accept' => 'application/json'])
+        $this->post('/mintrans-auto/start', ['file' => $file, 'skip_missing' => '1', 'skip_found' => '1'], ['Accept' => 'application/json'])
             ->assertStatus(202)
             ->assertJsonPath('run.file', 'raqamlar.xlsx');
 
         $run = JobRun::sole();
         $this->assertSame('mintrans', $run->operation);
         $this->assertTrue($run->params['skip_missing']);
+        $this->assertTrue($run->params['skip_found']);
+        $this->assertTrue(RunOperationJob::commandsFor($run)[0][1]['--skip-known-found']);
         $this->assertStringStartsWith(storage_path('app/mintrans/results/raqamlar_'), $run->params['plates']);
         $this->assertSame($run->params['plates'], RunOperationJob::commandsFor($run)[0][1]['--plates-output']);
         $this->assertFileExists($run->params['file']);

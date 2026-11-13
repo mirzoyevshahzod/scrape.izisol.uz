@@ -39,6 +39,7 @@ Route::middleware('auth')->group(function () {
         Route::get('/missing', [MintransController::class, 'missing'])->name('missing');
         Route::get('/missing/export', [MintransController::class, 'exportMissing'])->name('missing.export');
         Route::post('/missing/recheck', [MintransController::class, 'recheckMissing'])->name('missing.recheck');
+        Route::post('/found/import', [MintransController::class, 'importFound'])->name('found.import');
     });
     // spot.uz tadbirlari: ro'yxat, kalit so'zlar va "Qidirish" (spot:events'ni hozir ishga tushirish)
     Route::prefix('spot-events')->name('spot-events.')->middleware('permission:page.spot-events')->group(function () {

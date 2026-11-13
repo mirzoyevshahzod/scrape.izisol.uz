@@ -101,7 +101,7 @@ return [
             'hidden' => true,
             'timeout' => 28800, // 8 soat: katta fayl (~7 600 raqam) 1–3-bosqichlarda ~4.5 soat
             'commands' => [
-                ['mintrans:scrape', ['file' => '{file}', '--output' => '{result}', '--run' => '{run}', '--skip-known-missing' => '{skip_missing}', '--plates-output' => '{plates}', '--resume' => '{resume}']],
+                ['mintrans:scrape', ['file' => '{file}', '--output' => '{result}', '--run' => '{run}', '--skip-known-missing' => '{skip_missing}', '--skip-known-found' => '{skip_found}', '--plates-output' => '{plates}', '--resume' => '{resume}']],
                 ['mintrans:clean-names', ['file' => '{result}']],
                 ['mintrans:inn', ['file' => '{result}', '--run' => '{run}']],
             ],
@@ -131,6 +131,19 @@ return [
             'timeout' => 28800, // 8 soat: katta fayl (~7 600 raqam) 1–3-bosqichlarda ~4.5 soat
             'commands' => [
                 ['mintrans:inn', ['file' => '{file}', '--output' => '{result}', '--run' => '{run}']],
+            ],
+        ],
+
+        // Mintrans Avtoraqam sahifasi, "Topilgan raqamlar bazasi": tayyor Excel'dagi topilgan raqamlarni bazaga yuklash
+        'mintrans-import' => [
+            'label' => 'Topilgan raqamlarni bazaga yuklash',
+            'description' => 'Tayyor natija Excel\'idagi (masalan 3-bosqichdan keyingi) avtoraqamlar va ularning ma\'lumotini bazaga yozadi — 1-bosqich ularni qayta so\'ramaydi.',
+            'icon' => 'fa-database',
+            'permission' => 'page.mintrans-auto',
+            'hidden' => true,
+            'timeout' => 3600,
+            'commands' => [
+                ['mintrans:import-found', ['file' => '{file}', '--overwrite' => '{overwrite}', '--run' => '{run}']],
             ],
         ],
 
