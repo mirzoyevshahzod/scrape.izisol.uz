@@ -22,7 +22,7 @@ API daqiqasiga 120 so'rov qabul qiladi — klient so'rovlar orasida 0.5 s kutadi
 
 | Buyruq | API | Nima qiladi |
 |---|---|---|
-| `crm:daily-import` (08:00) | `GET /borders`, `POST /custom-operations/import` | Kunlik fayllarni konvert qilib, granitsa nomi -> ID, "Торнадо"ga yuklaydi |
+| `crm:daily-import` (har soatda, scrape'dan keyin) | `GET /borders`, `POST /custom-operations/import` | Kunlik fayllarni konvert qilib, granitsa nomi -> ID, "Торнадо"ga yuklaydi |
 | `crm:import-custom-operations {path} --border=` | xuddi shu | Bitta faylni yuklaydi (granitsa fayl nomidan yoki `--border=` nom/ID) |
 | `crm:plate-operators {file}` | `GET /orders?search=<raqam>` | Raqam bo'yicha eng ko'p qatnashgan OPERATION menejeri -> "Manager" ustuni |
 | `scrape:zanjeer-operators {file}` | `GET /contragents?search=<kompaniya>` | Kompaniyaning mas'ul xodimi -> H ustuni (pipeline) |

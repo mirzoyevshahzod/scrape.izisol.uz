@@ -11,70 +11,61 @@ Artisan::command('inspire', function () {
 
 /*
 |--------------------------------------------------------------------
-| Kunlik pipeline — har bir bosqich orasida 1 soat
+| Har soatda: scraping -> CRM import
 |--------------------------------------------------------------------
-| 06:00 — barcha scrape buyruqlari (Qoldau, declarant, zitic, turkey)
+| Har soat boshida barcha scrape buyruqlari (Qoldau, declarant, zitic,
+| turkey) ishga tushadi, so'ng crm:daily-import yangi fayllarni EGS CRM'ga
+| ("Торнадо") yuklaydi. schedule:run bir daqiqada due bo'lgan buyruqlarni
+| shu yerda yozilgan tartibda ketma-ket bajaradi, shuning uchun CRM import
+| aynan shu soatning scrape fayllarini oladi. CRM'ga qayta yuklash xavfsiz
+| (mavjud yozuvlar yangilanadi), shuning uchun dublikat bo'lmaydi.
+| withoutOverlapping: oldingi soat hali tugamagan bo'lsa, o'sha buyruq
+| shu soat o'tkazib yuboriladi.
+|
+| Kunlik bosqichlar (eng oxirgi soatlik fayllar bilan):
 | 07:00 — Qoldau warehouse import/export/merge pipeline
-| 08:00 — EGS CRM'ga import (custom-operations, API orqali)
 | 08:45 — kunlik fayllarni Telegram'ga yuborish
 | 09:00 — kunlik pipeline holati haqida Telegram'ga hisobot
 */
 
-$qoldauCheckpoints = config('operations.qoldau_checkpoints');
+$recordFailure = fn (string $step) => fn () => PipelineStatus::recordFailure(
+    "{$step} (" . now()->format('H:00') . ')',
+    "Muvaffaqiyatsiz tugadi, batafsil: storage/logs/laravel-" . now()->format('Y-m-d') . '.log'
+);
 
-foreach ($qoldauCheckpoints as $checkpoint) {
+foreach (config('operations.qoldau_checkpoints') as $checkpoint) {
     Schedule::command('qoldau:scrape', [$checkpoint])
-        ->dailyAt('06:00')
+        ->hourly()
         ->withoutOverlapping()
-        ->onFailure(fn () => PipelineStatus::recordFailure(
-            "qoldau:scrape [{$checkpoint}]",
-            "Muvaffaqiyatsiz tugadi, batafsil: storage/logs/laravel-" . now()->format('Y-m-d') . '.log'
-        ));
+        ->onFailure($recordFailure("qoldau:scrape [{$checkpoint}]"));
 }
 
-$declarantZones = config('operations.declarant_zones');
-
-foreach ($declarantZones as $zone) {
+foreach (config('operations.declarant_zones') as $zone) {
     Schedule::command('scrape:declarant-data', [$zone])
-        ->dailyAt('06:00')
+        ->hourly()
         ->withoutOverlapping()
-        ->onFailure(fn () => PipelineStatus::recordFailure(
-            "scrape:declarant-data [{$zone}]",
-            "Muvaffaqiyatsiz tugadi, batafsil: storage/logs/laravel-" . now()->format('Y-m-d') . '.log'
-        ));
+        ->onFailure($recordFailure("scrape:declarant-data [{$zone}]"));
 }
 
 Schedule::command('scrape:zitic-html')
-    ->dailyAt('06:00')
+    ->hourly()
     ->withoutOverlapping()
-    ->onFailure(fn () => PipelineStatus::recordFailure(
-        'scrape:zitic-html (06:00)',
-        "Muvaffaqiyatsiz tugadi, batafsil: storage/logs/laravel-" . now()->format('Y-m-d') . '.log'
-    ));
+    ->onFailure($recordFailure('scrape:zitic-html'));
 
 Schedule::command('scrape:html')
-    ->dailyAt('06:00')
+    ->hourly()
     ->withoutOverlapping()
-    ->onFailure(fn () => PipelineStatus::recordFailure(
-        'scrape:html (06:00)',
-        "Muvaffaqiyatsiz tugadi, batafsil: storage/logs/laravel-" . now()->format('Y-m-d') . '.log'
-    ));
+    ->onFailure($recordFailure('scrape:html'));
+
+Schedule::command('crm:daily-import')
+    ->hourly()
+    ->withoutOverlapping()
+    ->onFailure($recordFailure('crm:daily-import'));
 
 Schedule::command('qozoq:warehouse-pipeline')
     ->dailyAt('07:00')
     ->withoutOverlapping()
-    ->onFailure(fn () => PipelineStatus::recordFailure(
-        'qozoq:warehouse-pipeline (07:00)',
-        "Muvaffaqiyatsiz tugadi, batafsil: storage/logs/laravel-" . now()->format('Y-m-d') . '.log'
-    ));
-
-Schedule::command('crm:daily-import')
-    ->dailyAt('08:00')
-    ->withoutOverlapping()
-    ->onFailure(fn () => PipelineStatus::recordFailure(
-        'crm:daily-import (08:00)',
-        "Muvaffaqiyatsiz tugadi, batafsil: storage/logs/laravel-" . now()->format('Y-m-d') . '.log'
-    ));
+    ->onFailure($recordFailure('qozoq:warehouse-pipeline'));
 
 Schedule::command('telegram:send-daily-files')
     ->dailyAt('08:45')

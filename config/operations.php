@@ -13,7 +13,7 @@
 | 'fields' — qo'shimcha tanlovlar (App\Support\Operations\OperationFields).
 |
 | Qoldau checkpoint'lari va declarant zonalari routes/console.php'dagi
-| 06:00 jadvali bilan umumiy — "Barcha scraping" tugmasi aynan jadvaldagi
+| soatlik jadval bilan umumiy — "Barcha scraping" tugmasi aynan jadvaldagi
 | buyruqlarni ishga tushiradi.
 |
 */
