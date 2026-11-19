@@ -7,6 +7,7 @@ use App\Services\EgsCrmAuthException;
 use App\Services\EgsCrmClient;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Sleep;
 use PhpOffice\PhpSpreadsheet\IOFactory;
@@ -37,8 +38,7 @@ class EgsCrmTest extends TestCase
 
     protected function tearDown(): void
     {
-        array_map('unlink', glob("{$this->dir}/*"));
-        rmdir($this->dir);
+        File::deleteDirectory($this->dir);
 
         parent::tearDown();
     }
@@ -161,6 +161,78 @@ class EgsCrmTest extends TestCase
         $this->artisan('crm:daily-import')
             ->expectsOutputToContain('CRM API ishlamayapti: CRM API kaliti noto\'g\'ri (401)')
             ->assertFailed();
+    }
+
+    // --- soatlik Telegram hisobot ---
+
+    /** Turkey manba faylini vaqtinchalik storage'ga qo'yadi; Telegram'ga ketgan xabarlarni qaytaradi */
+    private function hourlyImport(int $fileAgeHours, array $fake, array $options = ['--only' => 'turkey', '--notify' => true]): array
+    {
+        config(['services.telegram.daily_files_bot_token' => 'bot-token', 'services.telegram.report_chat_id' => '555']);
+        app()->useStoragePath("{$this->dir}/storage");
+        mkdir("{$this->dir}/storage/app/turkey", 0777, true);
+        $file = "{$this->dir}/storage/app/turkey/turkey_scrape-" . now()->format('Y-m-d') . '.xlsx';
+        rename($this->excel([['№', 'Turi', 'Raqam', 'Sana'], [1, 'TIR', '01A123BC', '19.11.2026 10:00']]), $file);
+        touch($file, now()->subHours($fileAgeHours)->getTimestamp());
+
+        $messages = [];
+        Http::fake($fake + ['api.telegram.org/*' => function (Request $r) use (&$messages) {
+            $messages[] = $r->data();
+
+            return Http::response(['ok' => true]);
+        }]);
+
+        $this->artisan('crm:daily-import', $options)->run();
+
+        return $messages;
+    }
+
+    public function test_hourly_import_reports_rows_and_source_file_time_to_telegram(): void
+    {
+        $messages = $this->hourlyImport(0, [
+            self::API . '/borders*' => Http::response(self::borders()),
+            self::API . '/custom-operations/import' => Http::response(['success' => true, 'data' => ['rows_count' => 152]]),
+        ]);
+
+        $this->assertCount(1, $messages);
+        $this->assertSame('555', $messages[0]['chat_id']);
+        $this->assertSame('HTML', $messages[0]['parse_mode']);
+        $this->assertStringStartsWith('✅ <b>CRM import — ', $messages[0]['text']);
+        $this->assertStringContainsString('Yuklandi: 1 ta granitsa, 152 ta qator', $messages[0]['text']);
+        $this->assertStringContainsString('<b>Turkey</b> · fayl ' . now()->format('H:i'), $messages[0]['text']);
+        $this->assertStringContainsString('✅ Хопа-Сарпи: 152 ta qator yuklandi', $messages[0]['text']);
+        $this->assertStringNotContainsString('eski', $messages[0]['text']);
+    }
+
+    public function test_hourly_report_warns_when_scrape_file_is_old(): void
+    {
+        $messages = $this->hourlyImport(5, [
+            self::API . '/borders*' => Http::response(self::borders()),
+            self::API . '/custom-operations/import' => Http::response(['success' => true, 'data' => ['rows_count' => 3]]),
+        ]);
+
+        $this->assertStringStartsWith('⚠️', $messages[0]['text']);
+        $this->assertStringContainsString('(eski)', $messages[0]['text']);
+        $this->assertStringContainsString('scrapingi oxirgi 2 soatda yangi fayl yaratmagan', $messages[0]['text']);
+    }
+
+    public function test_hourly_report_is_sent_when_crm_api_is_down(): void
+    {
+        $messages = $this->hourlyImport(0, [self::API . '/*' => Http::response(['message' => 'Unauthenticated.'], 401)]);
+
+        $this->assertCount(1, $messages);
+        $this->assertStringStartsWith('❌', $messages[0]['text']);
+        $this->assertStringContainsString('Import bajarilmadi: CRM API ishlamayapti', $messages[0]['text']);
+    }
+
+    public function test_daily_import_without_notify_sends_nothing_to_telegram(): void
+    {
+        $messages = $this->hourlyImport(0, [
+            self::API . '/borders*' => Http::response(self::borders()),
+            self::API . '/custom-operations/import' => Http::response(['success' => true, 'data' => ['rows_count' => 1]]),
+        ], ['--only' => 'turkey']);
+
+        $this->assertSame([], $messages);
     }
 
     public function test_ping_lists_borders(): void

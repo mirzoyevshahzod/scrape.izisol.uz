@@ -19,6 +19,8 @@ Artisan::command('inspire', function () {
 | shu yerda yozilgan tartibda ketma-ket bajaradi, shuning uchun CRM import
 | aynan shu soatning scrape fayllarini oladi. CRM'ga qayta yuklash xavfsiz
 | (mavjud yozuvlar yangilanadi), shuning uchun dublikat bo'lmaydi.
+| --notify: har import natijasi (granitsalar, qatorlar soni, manba fayl
+| qachon yangilangani) TELEGRAM_REPORT_CHAT_ID'ga yuboriladi.
 | withoutOverlapping: oldingi soat hali tugamagan bo'lsa, o'sha buyruq
 | shu soat o'tkazib yuboriladi.
 |
@@ -57,7 +59,7 @@ Schedule::command('scrape:html')
     ->withoutOverlapping()
     ->onFailure($recordFailure('scrape:html'));
 
-Schedule::command('crm:daily-import')
+Schedule::command('crm:daily-import', ['--notify'])
     ->hourly()
     ->withoutOverlapping()
     ->onFailure($recordFailure('crm:daily-import'));

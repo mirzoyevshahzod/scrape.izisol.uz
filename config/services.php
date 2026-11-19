@@ -38,6 +38,8 @@ return [
     'telegram' => [
         'bot_token' => env('TELEGRAM_BOT_TOKEN'),
         'daily_files_bot_token' => env('TELEGRAM_SCRAPING_BOT_TOKEN'),
+        // kunlik holat va har soatlik CRM import hisobotlari shu chatga (daily_files_bot_token boti orqali)
+        'report_chat_id' => env('TELEGRAM_REPORT_CHAT_ID', '7510409703'),
     ],
 
     'checkpoint_scraper' => [

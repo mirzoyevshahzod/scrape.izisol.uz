@@ -270,9 +270,23 @@ class OperationsTest extends TestCase
         $lock->release();
     }
 
+    public function test_schedule_lock_matches_scheduled_command_with_options(): void
+    {
+        // jadvalda "crm:daily-import --notify", tugma esa "crm:daily-import [--date=...]" ishlatadi
+        $lock = new ScheduleLock('crm:daily-import', []);
+        $this->assertTrue($lock->acquire());
+
+        $event = collect(app(Schedule::class)->events())->first(fn ($e) => str_ends_with($e->command, 'crm:daily-import --notify'));
+        $this->assertTrue($event->mutex->exists($event));
+        $this->assertFalse((new ScheduleLock('crm:daily-import', ['--date' => '2026-10-20']))->acquire());
+
+        $lock->release();
+        $this->assertFalse($event->mutex->exists($event));
+    }
+
     public function test_crm_import_is_on_the_daily_schedule(): void
     {
-        $this->assertTrue(collect(app(Schedule::class)->events())->contains(fn ($e) => str_ends_with($e->command, 'crm:daily-import')));
+        $this->assertTrue(collect(app(Schedule::class)->events())->contains(fn ($e) => str_ends_with($e->command, 'crm:daily-import --notify')));
     }
 
     // --- Telegram: bitta faylni tanlash va qayta yuborish ---

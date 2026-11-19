@@ -16,7 +16,8 @@ use Illuminate\Support\ProcessUtils;
  *
  * Jadvaldagi vazifani topishda `--date` kabi opsiyalar (kalitlari "--"
  * bilan boshlanadi) hisobga olinmaydi: `crm:daily-import --date=...` ham
- * jadvaldagi `crm:daily-import` bilan bir qulfni ishlatadi.
+ * jadvaldagi `crm:daily-import` bilan bir qulfni ishlatadi. Jadval tomonidagi
+ * opsiyalar ham hisobga olinmaydi (`crm:daily-import --notify` jadvalda).
  *
  * Mutex kaliti buyruq satriga (PHP binary yo'li bilan) bog'liq — shuning
  * uchun queue worker cron'dagi `schedule:run` bilan bir xil PHP binary'da
@@ -55,7 +56,10 @@ class ScheduleLock
         )));
 
         foreach (app(Schedule::class)->events() as $event) {
-            if ($event->command === $expected) {
+            // jadvaldagi buyruq oxiridagi opsiyalar (--notify ...) hisobga olinmaydi
+            $command = preg_replace('/(?:\s+--[\w-]+(?:=\S*)?)+$/', '', (string) $event->command);
+
+            if ($command === $expected) {
                 // mutex kaliti expiresAt'ga bog'liq emas — nusxada TTL'ni qisqartiramiz
                 $event = clone $event;
                 $event->expiresAt = self::TTL_MINUTES;

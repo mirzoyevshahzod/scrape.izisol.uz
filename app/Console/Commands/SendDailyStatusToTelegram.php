@@ -18,19 +18,18 @@ class SendDailyStatusToTelegram extends Command
 {
     protected $signature = 'telegram:daily-status';
 
-    protected $description = "Kunlik pipeline holati haqida 7510409703'ga hisobot yuboradi";
-
-    private const REPORT_CHAT_ID = '7510409703';
+    protected $description = 'Kunlik pipeline holati haqida TELEGRAM_REPORT_CHAT_ID\'ga hisobot yuboradi';
 
     public function handle(): int
     {
         $today = Carbon::now()->format('Y-m-d');
         $failures = PipelineStatus::todayFailures();
         $sender = new TelegramSender();
+        $chatId = (string) config('services.telegram.report_chat_id');
 
         if (empty($failures)) {
             $sender->sendMessage(
-                self::REPORT_CHAT_ID,
+                $chatId,
                 "✅ {$today}: bugungi pipeline (scraping, warehouse, CRM import, fayllarni yuborish) muvaffaqiyatli ishladi."
             );
             $this->info('Muvaffaqiyatli xabar yuborildi.');
@@ -44,7 +43,7 @@ class SendDailyStatusToTelegram extends Command
             $lines[] = "— {$step}: {$message}";
         }
 
-        $sender->sendMessage(self::REPORT_CHAT_ID, implode("\n", $lines));
+        $sender->sendMessage($chatId, implode("\n", $lines));
         $this->info('Xatolik xabari yuborildi.');
 
         return self::SUCCESS;
