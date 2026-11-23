@@ -27,11 +27,17 @@ $qoldauCheckpoints = [
 
 $declarantZones = ['benyakoni', 'kamennii-log', 'kozlovichi'];
 
+// shu zonalar soatlik emas, har 30 daqiqada scrape qilinadi va :30 da CRM'ga
+// alohida yuklanadi (crm:daily-import --only=declarant) — routes/console.php
+$declarantHalfHourlyZones = ['benyakoni', 'kamennii-log'];
+
 return [
 
     'qoldau_checkpoints' => $qoldauCheckpoints,
 
     'declarant_zones' => $declarantZones,
+
+    'declarant_half_hourly_zones' => $declarantHalfHourlyZones,
 
     'operations' => [
         'crm-check' => [

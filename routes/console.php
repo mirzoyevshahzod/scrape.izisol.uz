@@ -24,6 +24,11 @@ Artisan::command('inspire', function () {
 | withoutOverlapping: oldingi soat hali tugamagan bo'lsa, o'sha buyruq
 | shu soat o'tkazib yuboriladi.
 |
+| Benyakoni va Kamennii Log (operations.declarant_half_hourly_zones) — har
+| 30 daqiqada: :00 da hamma bilan birga, :30 da esa alohida scrape qilinib,
+| darhol faqat Declarant CRM'ga yuklanadi (crm:daily-import --only=declarant).
+| Soatlik to'liq import hali ishlayotgan bo'lsa, :30 dagisi o'tkazib yuboriladi.
+|
 | Kunlik bosqichlar (eng oxirgi soatlik fayllar bilan):
 | 07:00 — Qoldau warehouse import/export/merge pipeline
 | 08:45 — kunlik fayllarni Telegram'ga yuborish
@@ -31,7 +36,7 @@ Artisan::command('inspire', function () {
 */
 
 $recordFailure = fn (string $step) => fn () => PipelineStatus::recordFailure(
-    "{$step} (" . now()->format('H:00') . ')',
+    "{$step} (" . now()->format('H:i') . ')',
     "Muvaffaqiyatsiz tugadi, batafsil: storage/logs/laravel-" . now()->format('Y-m-d') . '.log'
 );
 
@@ -43,9 +48,13 @@ foreach (config('operations.qoldau_checkpoints') as $checkpoint) {
 }
 
 foreach (config('operations.declarant_zones') as $zone) {
-    Schedule::command('scrape:declarant-data', [$zone])
-        ->hourly()
-        ->withoutOverlapping()
+    $event = Schedule::command('scrape:declarant-data', [$zone]);
+
+    in_array($zone, config('operations.declarant_half_hourly_zones'), true)
+        ? $event->everyThirtyMinutes()
+        : $event->hourly();
+
+    $event->withoutOverlapping()
         ->onFailure($recordFailure("scrape:declarant-data [{$zone}]"));
 }
 
@@ -59,10 +68,16 @@ Schedule::command('scrape:html')
     ->withoutOverlapping()
     ->onFailure($recordFailure('scrape:html'));
 
-Schedule::command('crm:daily-import', ['--notify'])
+$fullImport = Schedule::command('crm:daily-import', ['--notify'])
     ->hourly()
     ->withoutOverlapping()
     ->onFailure($recordFailure('crm:daily-import'));
+
+Schedule::command('crm:daily-import', ['--only=declarant', '--notify'])
+    ->hourlyAt(30)
+    ->withoutOverlapping()
+    ->skip(fn () => $fullImport->mutex->exists($fullImport))
+    ->onFailure($recordFailure('crm:daily-import [declarant]'));
 
 Schedule::command('qozoq:warehouse-pipeline')
     ->dailyAt('07:00')
