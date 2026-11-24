@@ -13,7 +13,7 @@ Artisan::command('inspire', function () {
 |--------------------------------------------------------------------
 | Har soatda: scraping -> CRM import
 |--------------------------------------------------------------------
-| Har soat boshida barcha scrape buyruqlari (Qoldau, declarant, zitic,
+| Har soat boshida barcha scrape buyruqlari (Qoldau, zitic,
 | turkey) ishga tushadi, so'ng crm:daily-import yangi fayllarni EGS CRM'ga
 | ("Торнадо") yuklaydi. schedule:run bir daqiqada due bo'lgan buyruqlarni
 | shu yerda yozilgan tartibda ketma-ket bajaradi, shuning uchun CRM import
@@ -24,10 +24,11 @@ Artisan::command('inspire', function () {
 | withoutOverlapping: oldingi soat hali tugamagan bo'lsa, o'sha buyruq
 | shu soat o'tkazib yuboriladi.
 |
-| Benyakoni va Kamennii Log (operations.declarant_half_hourly_zones) — har
-| 30 daqiqada: :00 da hamma bilan birga, :30 da esa alohida scrape qilinib,
-| darhol faqat Declarant CRM'ga yuklanadi (crm:daily-import --only=declarant).
-| Soatlik to'liq import hali ishlayotgan bo'lsa, :30 dagisi o'tkazib yuboriladi.
+| Belarus navbati (Benyakoni, Kamennii Log) — belarusborder.by Cloudflare
+| Turnstile qo'ygani uchun captcha'ni odam yechadigan serverdagi brauzerdan
+| keladi (deploy/belarus-queue-browser). belarus:queue-sync har daqiqa
+| kelganini darhol CRM'ga yuklaydi (crm:daily-import --only=declarant) va
+| ma'lumot eskirsa Telegram'ga captcha havolasi bilan eslatma yuboradi.
 |
 | Kunlik bosqichlar (eng oxirgi soatlik fayllar bilan):
 | 07:00 — Qoldau warehouse import/export/merge pipeline
@@ -47,16 +48,11 @@ foreach (config('operations.qoldau_checkpoints') as $checkpoint) {
         ->onFailure($recordFailure("qoldau:scrape [{$checkpoint}]"));
 }
 
-foreach (config('operations.declarant_zones') as $zone) {
-    $event = Schedule::command('scrape:declarant-data', [$zone]);
-
-    in_array($zone, config('operations.declarant_half_hourly_zones'), true)
-        ? $event->everyThirtyMinutes()
-        : $event->hourly();
-
-    $event->withoutOverlapping()
-        ->onFailure($recordFailure("scrape:declarant-data [{$zone}]"));
-}
+// Belarus navbati (declarant) — sayt captcha qo'ygani uchun API'dan emas,
+// captcha'ni odam yechadigan brauzerdan keladi (config/belarus_queue.php)
+Schedule::command('belarus:queue-sync')
+    ->everyMinute()
+    ->withoutOverlapping();
 
 Schedule::command('scrape:zitic-html')
     ->hourly()
@@ -68,16 +64,10 @@ Schedule::command('scrape:html')
     ->withoutOverlapping()
     ->onFailure($recordFailure('scrape:html'));
 
-$fullImport = Schedule::command('crm:daily-import', ['--notify'])
+Schedule::command('crm:daily-import', ['--notify'])
     ->hourly()
     ->withoutOverlapping()
     ->onFailure($recordFailure('crm:daily-import'));
-
-Schedule::command('crm:daily-import', ['--only=declarant', '--notify'])
-    ->hourlyAt(30)
-    ->withoutOverlapping()
-    ->skip(fn () => $fullImport->mutex->exists($fullImport))
-    ->onFailure($recordFailure('crm:daily-import [declarant]'));
 
 Schedule::command('qozoq:warehouse-pipeline')
     ->dailyAt('07:00')

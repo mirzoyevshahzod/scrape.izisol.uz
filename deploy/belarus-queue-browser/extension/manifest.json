@@ -1,0 +1,13 @@
+{
+  "manifest_version": 3,
+  "name": "Belarus navbati -> scrape.izisol.uz",
+  "version": "1.0.0",
+  "description": "mon.declarant.by sahifasi (captcha'ni odam yechgan) olgan navbat javobini scrape.izisol.uz serveriga yuboradi.",
+  "permissions": ["alarms", "tabs", "storage"],
+  "host_permissions": ["https://mon.declarant.by/*", "https://scrape.izisol.uz/*"],
+  "background": { "service_worker": "background.js" },
+  "content_scripts": [
+    { "matches": ["https://mon.declarant.by/*"], "js": ["inject.js"], "run_at": "document_start", "world": "MAIN" },
+    { "matches": ["https://mon.declarant.by/*"], "js": ["relay.js"], "run_at": "document_start" }
+  ]
+}

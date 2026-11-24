@@ -17,10 +17,14 @@ use App\Http\Controllers\API\MergeExcelFilesController;
 use App\Http\Controllers\API\ConvertTurkiyaFilesController;
 use App\Http\Controllers\API\SearchUzbekCarNumberController;
 use App\Http\Controllers\CheckpointScraperController;
+use App\Http\Controllers\API\BelarusQueueController;
 
 
 // Telegram serverlari chaqiradi — login talab qilinmaydi
 Route::post('/telegram/webhook', [TelegramBotController::class, 'webhook']);
+
+// Serverdagi brauzer kengaytmasi (captcha'ni odam yechadi) Belarus navbatini yuboradi — X-Ingest-Token bilan
+Route::post('/belarus-queue', [BelarusQueueController::class, 'ingest'])->middleware('throttle:60,1');
 
 // Qolgan barcha endpoint'lar faqat brauzerdagi sahifalardan chaqiriladi:
 // 'web' guruhi session cookie + CSRF tekshiruvini beradi, 'auth' esa login talab qiladi.

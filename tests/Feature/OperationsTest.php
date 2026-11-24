@@ -284,28 +284,13 @@ class OperationsTest extends TestCase
         $this->assertFalse($event->mutex->exists($event));
     }
 
-    public function test_benyakoni_and_kamennii_log_run_every_half_hour_with_their_own_crm_import(): void
+    public function test_belarus_queue_comes_from_browser_sync_not_api_scrape(): void
     {
-        $events = collect(app(Schedule::class)->events())->mapWithKeys(fn ($e) => [preg_replace('/^.*artisan\'? /', '', $e->command) => $e]);
+        $events = collect(app(Schedule::class)->events());
 
-        $this->assertSame('*/30 * * * *', $events["scrape:declarant-data 'benyakoni'"]->expression);
-        $this->assertSame('*/30 * * * *', $events["scrape:declarant-data 'kamennii-log'"]->expression);
-        $this->assertSame('0 * * * *', $events["scrape:declarant-data 'kozlovichi'"]->expression);
-        $this->assertSame('0 * * * *', $events['crm:daily-import --notify']->expression);
-
-        // :30 dagi import scrape'lardan keyin ishlaydi va soatlik to'liq import ishlayotganda o'tkazib yuboriladi
-        $declarant = $events['crm:daily-import --only=declarant --notify'];
-        $this->assertSame('30 * * * *', $declarant->expression);
-        $this->assertGreaterThan(
-            $events->keys()->search("scrape:declarant-data 'benyakoni'"),
-            $events->keys()->search('crm:daily-import --only=declarant --notify')
-        );
-
-        $full = $events['crm:daily-import --notify'];
-        $this->assertTrue($declarant->filtersPass($this->app));
-        $full->mutex->create($full);
-        $this->assertFalse($declarant->filtersPass($this->app));
-        $full->mutex->forget($full);
+        $this->assertSame('* * * * *', $events->first(fn ($e) => str_ends_with($e->command, 'belarus:queue-sync'))->expression);
+        $this->assertFalse($events->contains(fn ($e) => str_contains($e->command, 'scrape:declarant-data')));
+        $this->assertFalse(collect(config('operations.operations.scraping.commands'))->contains(fn ($c) => $c[0] === 'scrape:declarant-data'));
     }
 
     public function test_crm_import_is_on_the_daily_schedule(): void

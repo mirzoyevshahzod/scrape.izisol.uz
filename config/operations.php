@@ -12,7 +12,7 @@
 | tanlangan kun har bir buyruqqa --date=YYYY-MM-DD sifatida beriladi.
 | 'fields' — qo'shimcha tanlovlar (App\Support\Operations\OperationFields).
 |
-| Qoldau checkpoint'lari va declarant zonalari routes/console.php'dagi
+| Qoldau checkpoint'lari routes/console.php'dagi
 | soatlik jadval bilan umumiy — "Barcha scraping" tugmasi aynan jadvaldagi
 | buyruqlarni ishga tushiradi.
 |
@@ -25,19 +25,10 @@ $qoldauCheckpoints = [
     'Kazakhstan - Kyrgyzstan',
 ];
 
-$declarantZones = ['benyakoni', 'kamennii-log', 'kozlovichi'];
-
-// shu zonalar soatlik emas, har 30 daqiqada scrape qilinadi va :30 da CRM'ga
-// alohida yuklanadi (crm:daily-import --only=declarant) — routes/console.php
-$declarantHalfHourlyZones = ['benyakoni', 'kamennii-log'];
 
 return [
 
     'qoldau_checkpoints' => $qoldauCheckpoints,
-
-    'declarant_zones' => $declarantZones,
-
-    'declarant_half_hourly_zones' => $declarantHalfHourlyZones,
 
     'operations' => [
         'crm-check' => [
@@ -168,12 +159,11 @@ return [
 
         'scraping' => [
             'label' => 'Barcha scraping',
-            'description' => 'Qoldau (4 ta), Declarant (3 ta), Zitic va Turkiya scraping\'ini ketma-ket ishga tushiradi.',
+            'description' => 'Qoldau (4 ta), Zitic va Turkiya scraping\'ini ketma-ket ishga tushiradi. Belarus (Declarant) navbati endi captcha\'li brauzer orqali keladi (belarus:queue-sync).',
             'icon' => 'fa-spider',
             'permission' => 'operation.scraping',
             'commands' => [
                 ...array_map(fn ($checkpoint) => ['qoldau:scrape', ['checkpoint' => $checkpoint]], $qoldauCheckpoints),
-                ...array_map(fn ($zone) => ['scrape:declarant-data', ['zone' => $zone]], $declarantZones),
                 ['scrape:zitic-html', []],
                 ['scrape:html', []],
             ],
